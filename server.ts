@@ -1341,8 +1341,11 @@ app.delete('/api/notes/:id', (req: any, res) => {
 // ----------------------------------------------------
 // API: Keyword Research / Competitive Intelligence API
 // ----------------------------------------------------
+// Store next page tokens for each search query to allow endless fresh pagination on Refresh Results
+const queryPageTokens = new Map<string, string>();
+
 app.post('/api/research', async (req: any, res) => {
-  const { query } = req.body;
+  const { query, refresh } = req.body;
   const key = getApiKey(req.userId);
   if (!key) return res.status(400).json({ error: 'YouTube API Key is not configured. Configure it in Settings.' });
   if (!query) return res.status(400).json({ error: 'Query parameter is required' });
@@ -1352,21 +1355,36 @@ app.post('/api/research', async (req: any, res) => {
     let items: any[] = [];
     let nextPageToken: string | undefined = undefined;
 
+    // Retrieve or clear stored page token based on refresh flag
+    let startPageToken: string | undefined = undefined;
+    if (refresh) {
+      startPageToken = queryPageTokens.get(query);
+    } else {
+      queryPageTokens.delete(query);
+    }
+
     // Page 1
+    const searchParams1: any = {
+      part: 'snippet',
+      q: query,
+      type: 'video',
+      maxResults: 50,
+      key
+    };
+    if (startPageToken) {
+      searchParams1.pageToken = startPageToken;
+    }
+
     const searchRes1 = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-      params: {
-        part: 'snippet',
-        q: query,
-        type: 'video',
-        maxResults: 50,
-        key
-      }
+      params: searchParams1
     });
     incrementUserQuota(req.userId, 100);
     if (searchRes1.data.items) {
       items = [...searchRes1.data.items];
       nextPageToken = searchRes1.data.nextPageToken;
     }
+
+    let finalNextPageToken = nextPageToken;
 
     // Page 2 (if available)
     if (nextPageToken && items.length < 100) {
@@ -1384,10 +1402,21 @@ app.post('/api/research', async (req: any, res) => {
         incrementUserQuota(req.userId, 100);
         if (searchRes2.data.items) {
           items = [...items, ...searchRes2.data.items];
+          if (searchRes2.data.nextPageToken) {
+            finalNextPageToken = searchRes2.data.nextPageToken;
+          }
         }
       } catch (err2) {
         console.error('Error fetching second page of research search results:', err2);
       }
+    }
+
+    // Store the next page token for subsequent refreshes of this query
+    if (finalNextPageToken) {
+      queryPageTokens.set(query, finalNextPageToken);
+    } else {
+      // If we ran out of pages, clear it so next refresh starts over
+      queryPageTokens.delete(query);
     }
 
     if (items.length === 0) return res.json([]);

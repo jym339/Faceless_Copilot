@@ -18,7 +18,10 @@ const POPULAR_RESEARCH_PRESETS = [
   { label: 'True Crime', value: 'crime investigation stories' },
   { label: 'Deep Space', value: 'deep space exploration documentary' },
   { label: 'Retro Tech', value: 'vintage computing retro tech' },
-  { label: 'Cabin Builds', value: 'diy cabin off grid building' }
+  { label: 'Cabin Builds', value: 'diy cabin off grid building' },
+  { label: 'Sleep & Healing', value: 'sleep healing soundscapes relaxation ambient' },
+  { label: 'Personal Finance', value: 'personal finance saving investing economy explainers' },
+  { label: 'Legal Explainers', value: 'legal case analysis breakdown law explainers' }
 ];
 
 const isWithinLast30Days = (publishedAt: string): boolean => {
@@ -40,6 +43,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
   const [minViews, setMinViews] = useState<string>('all');
   const [minMultiplier, setMinMultiplier] = useState<string>('all');
   const [formatFilter, setFormatFilter] = useState<'all' | 'long' | 'short'>('all');
+  const [publishedAge, setPublishedAge] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('multiplier');
   
   // Custom Focus state for Giant Slayers (<50k subs & >1M views)
@@ -68,7 +72,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
     fetchResearch(query);
   }, []);
 
-  const fetchResearch = async (searchQuery: string) => {
+  const fetchResearch = async (searchQuery: string, isRefresh = false) => {
     if (!searchQuery.trim()) return;
     setLoading(true);
     setError('');
@@ -110,7 +114,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ query: searchQuery.trim() }),
+        body: JSON.stringify({ query: searchQuery.trim(), refresh: isRefresh }),
       });
       const data = await res.json();
       clearInterval(progressInterval);
@@ -162,7 +166,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
   };
 
   const handleRefresh = () => {
-    fetchResearch(query);
+    fetchResearch(query, true);
   };
 
   const handlePresetClick = (presetValue: string) => {
@@ -186,6 +190,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
     setMinViews('all');
     setMinMultiplier('all');
     setFormatFilter('all');
+    setPublishedAge('all');
     setSortBy('multiplier');
     setGiantSlayerFocus(false);
   };
@@ -292,6 +297,22 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
 
     const multLimit = getMultiplierLimit(minMultiplier);
     if (video.outlier_multiplier < multLimit) return false;
+
+    if (publishedAge !== 'all' && video.published_at) {
+      const publishedTime = new Date(video.published_at).getTime();
+      const now = Date.now();
+      if (publishedAge === '24h') {
+        if (publishedTime < now - (24 * 60 * 60 * 1000)) return false;
+      } else if (publishedAge === '7d') {
+        if (publishedTime < now - (7 * 24 * 60 * 60 * 1000)) return false;
+      } else if (publishedAge === '30d') {
+        if (publishedTime < now - (30 * 24 * 60 * 60 * 1000)) return false;
+      } else if (publishedAge === '90d') {
+        if (publishedTime < now - (90 * 24 * 60 * 60 * 1000)) return false;
+      } else if (publishedAge === '365d') {
+        if (publishedTime < now - (365 * 24 * 60 * 60 * 1000)) return false;
+      }
+    }
 
     return true;
   });
@@ -552,7 +573,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                 )}
               </button>
 
-              {(maxSubs !== 'all' || minViews !== 'all' || minMultiplier !== 'all' || formatFilter !== 'all' || sortBy !== 'multiplier' || giantSlayerFocus) && (
+              {(maxSubs !== 'all' || minViews !== 'all' || minMultiplier !== 'all' || formatFilter !== 'all' || publishedAge !== 'all' || sortBy !== 'multiplier' || giantSlayerFocus) && (
                 <button
                   onClick={handleResetFilters}
                   className="text-[10px] font-bold font-mono text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer transition-all"
@@ -564,7 +585,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
             </div>
           </div>
 
-          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 ${giantSlayerFocus ? 'opacity-45 pointer-events-none' : ''}`}>
+          <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 ${giantSlayerFocus ? 'opacity-45 pointer-events-none' : ''}`}>
             {/* 1. Subscriber Count (Max Limit) */}
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] font-bold font-mono text-[var(--muted)] uppercase tracking-wider flex items-center gap-1">
@@ -652,6 +673,25 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                 <option value="subs_asc">Subscribers (Low to High)</option>
                 <option value="subs_desc">Subscribers (High to Low)</option>
                 <option value="newest">Upload Date (Newest First)</option>
+              </select>
+            </div>
+
+            {/* 6. Upload Date (Video Age) */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-bold font-mono text-[var(--muted)] uppercase tracking-wider flex items-center gap-1">
+                <Calendar size={11} /> Uploaded Within
+              </label>
+              <select
+                value={publishedAge}
+                onChange={(e) => setPublishedAge(e.target.value)}
+                className="bg-[#121824] border border-[var(--line)] text-slate-300 text-xs rounded-lg p-2 outline-none focus:border-[var(--accent)] transition-all cursor-pointer font-mono"
+              >
+                <option value="all">Any Upload Date</option>
+                <option value="24h">Last 24 hours</option>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days (1 month)</option>
+                <option value="90d">Last 90 days (3 months)</option>
+                <option value="365d">Last year</option>
               </select>
             </div>
           </div>
