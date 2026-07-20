@@ -4,6 +4,7 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import axios from 'axios';
 import db from './src/db.js';
+import crypto from 'crypto';
 import { GoogleGenAI, Type } from '@google/genai';
 
 const app = express();
@@ -1662,7 +1663,6 @@ app.get(['/auth/callback', '/auth/callback/'], async (req, res) => {
     `).run(id, email, name, picture, new Date().toISOString());
 
     // Generate session token
-    const crypto = await import('crypto');
     const sessionToken = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -1727,7 +1727,6 @@ app.post('/api/auth/email/signup', async (req, res) => {
       return res.status(400).json({ error: 'User with this email already exists' });
     }
 
-    const crypto = await import('crypto');
     const userId = 'email_user_' + crypto.randomBytes(8).toString('hex');
     const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
 
@@ -1781,7 +1780,6 @@ app.post('/api/auth/email/signin', async (req, res) => {
   const normalizedEmail = email.trim().toLowerCase();
 
   try {
-    const crypto = await import('crypto');
     const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
 
     const cred = db.prepare('SELECT * FROM user_credentials WHERE email = ? AND password_hash = ?').get(normalizedEmail, passwordHash) as { user_id: string } | undefined;

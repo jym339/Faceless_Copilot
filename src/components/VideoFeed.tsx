@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { formatDistanceToNow, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { X, ExternalLink, Play, Bell, BellRing } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Video, Alert } from '../types';
 
 interface VideoFeedProps {
@@ -148,94 +149,105 @@ export default function VideoFeed({ videos, onIgnore }: VideoFeedProps) {
 
   return (
     <div className="video-feed flex-1 p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 overflow-y-auto">
-      {videos.map(video => {
-        const freshBadge = getFreshBadge(video.discovered_at);
-        const trend = getTrendIndicator(video);
-        return (
-          <div 
-            key={video.id} 
-            onClick={() => setSelectedVideo(video)}
-            className="card rounded-xl relative overflow-hidden flex flex-col group cursor-pointer border border-[var(--line)] hover:border-[var(--accent)] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 bg-[var(--card-bg)]"
-          >
-            <div className="card-body p-4 flex flex-col flex-1">
-              <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
-                <div className="outlier-badge text-xs px-2 py-0.5 rounded font-bold bg-[#121824] text-[var(--accent)] border border-[var(--line)] shadow-sm">
-                  {video.outlier_multiplier.toFixed(1)}x
-                </div>
-                <div 
-                  className={`trend-badge text-[0.7rem] px-1.5 py-0.5 rounded font-semibold border flex items-center gap-1 transition-all duration-200 ${trend.colorClass}`}
-                  title={`${trend.label} (${trend.percentage})`}
-                >
-                  <span>{trend.arrow}</span>
-                  <span>{trend.percentage}</span>
-                </div>
-                {freshBadge && (
-                  <div className="fresh-badge px-2 py-0.5 text-[0.7rem] font-semibold rounded bg-[var(--accent)] text-white">
-                    {freshBadge}
+      <AnimatePresence mode="popLayout">
+        {videos.map(video => {
+          const freshBadge = getFreshBadge(video.discovered_at);
+          const trend = getTrendIndicator(video);
+          return (
+            <motion.div 
+              layout
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ 
+                duration: 0.3, 
+                ease: [0.16, 1, 0.3, 1], // elegant custom easeOut
+                layout: { duration: 0.3, ease: 'easeInOut' }
+              }}
+              key={video.id} 
+              onClick={() => setSelectedVideo(video)}
+              className="card rounded-xl relative overflow-hidden flex flex-col group cursor-pointer border border-[var(--line)] hover:border-[var(--accent)] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 bg-[var(--card-bg)]"
+            >
+              <div className="card-body p-4 flex flex-col flex-1">
+                <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+                  <div className="outlier-badge text-xs px-2 py-0.5 rounded font-bold bg-[#121824] text-[var(--accent)] border border-[var(--line)] shadow-sm">
+                    {video.outlier_multiplier.toFixed(1)}x
                   </div>
-                )}
-                <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono ml-auto">
-                  {formatDuration(video.duration_seconds)}
-                </span>
-              </div>
-
-              <h3 
-                className="text-sm md:text-[0.95rem] font-bold text-ink group-hover:text-accent transition-colors leading-snug line-clamp-2 mb-2" 
-                title={video.title}
-              >
-                {video.title}
-              </h3>
-              
-              <div className="card-meta flex justify-between items-center text-[0.8rem] text-[var(--muted)]">
-                <span>{formatNumber(video.view_count)} views • {formatDistanceToNow(new Date(video.published_at), { addSuffix: true })}</span>
-                <span>{formatDuration(video.duration_seconds)}</span>
-              </div>
-              
-              <div className="text-[0.8rem] text-[var(--accent)] mt-2 flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <img src={video.avatar_url} alt="" className="w-5 h-5 rounded-full" />
-                  <span className="font-medium">{video.channel_name} • {formatNumber(video.subscriber_count)} subs</span>
+                  <div 
+                    className={`trend-badge text-[0.7rem] px-1.5 py-0.5 rounded font-semibold border flex items-center gap-1 transition-all duration-200 ${trend.colorClass}`}
+                    title={`${trend.label} (${trend.percentage})`}
+                  >
+                    <span>{trend.arrow}</span>
+                    <span>{trend.percentage}</span>
+                  </div>
+                  {freshBadge && (
+                    <div className="fresh-badge px-2 py-0.5 text-[0.7rem] font-semibold rounded bg-[var(--accent)] text-white">
+                      {freshBadge}
+                    </div>
+                  )}
+                  <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono ml-auto">
+                    {formatDuration(video.duration_seconds)}
+                  </span>
                 </div>
-              </div>
 
-              <div className="mt-4 flex gap-2 justify-between items-center">
-                <div className="flex gap-2">
-                  <a
-                    href={`https://youtube.com/watch?v=${video.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="bg-[#ff0000] hover:bg-[#cc0000] text-white px-3 py-1 text-xs rounded font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    Watch <ExternalLink size={12} />
-                  </a>
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onIgnore(video.id);
-                    }}
-                    className="bg-[var(--line)] text-white px-3 py-1 text-xs rounded hover:bg-[#334155] cursor-pointer transition-colors"
-                  >
-                    Ignore
-                  </button>
-                  <button
-                    onClick={(e) => toggleAlert(video.channel_id, e)}
-                    className={`px-3 py-1 text-xs rounded flex items-center gap-1 cursor-pointer transition-colors ${alerts[video.channel_id] ? 'bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]' : 'bg-transparent text-[var(--muted)] hover:text-white border border-[var(--line)]'}`}
-                    title={alerts[video.channel_id] ? "Alerts enabled for this channel" : "Create alert for this channel"}
-                  >
-                    {alerts[video.channel_id] ? <BellRing size={12} /> : <Bell size={12} />}
-                    <span className="hidden md:inline">Alert</span>
-                  </button>
+                <h3 
+                  className="text-sm md:text-[0.95rem] font-bold text-ink group-hover:text-accent transition-colors leading-snug line-clamp-2 mb-2" 
+                  title={video.title}
+                >
+                  {video.title}
+                </h3>
+                
+                <div className="card-meta flex justify-between items-center text-[0.8rem] text-[var(--muted)]">
+                  <span>{formatNumber(video.view_count)} views • {formatDistanceToNow(new Date(video.published_at), { addSuffix: true })}</span>
+                  <span>{formatDuration(video.duration_seconds)}</span>
                 </div>
                 
-                <span className="text-[10px] text-[var(--muted)] font-mono">
-                  Multiplier: <strong className="text-[var(--accent)] font-bold">{video.outlier_multiplier.toFixed(1)}x</strong>
-                </span>
+                <div className="text-[0.8rem] text-[var(--accent)] mt-2 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <img src={video.avatar_url} alt="" className="w-5 h-5 rounded-full" />
+                    <span className="font-medium">{video.channel_name} • {formatNumber(video.subscriber_count)} subs</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex gap-2 justify-between items-center">
+                  <div className="flex gap-2">
+                    <a
+                      href={`https://youtube.com/watch?v=${video.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-[#ff0000] hover:bg-[#cc0000] text-white px-3 py-1 text-xs rounded font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      Watch <ExternalLink size={12} />
+                    </a>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onIgnore(video.id);
+                      }}
+                      className="bg-[var(--line)] text-white px-3 py-1 text-xs rounded hover:bg-[#334155] cursor-pointer transition-colors"
+                    >
+                      Ignore
+                    </button>
+                    <button
+                      onClick={(e) => toggleAlert(video.channel_id, e)}
+                      className={`px-3 py-1 text-xs rounded flex items-center gap-1 cursor-pointer transition-colors ${alerts[video.channel_id] ? 'bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]' : 'bg-transparent text-[var(--muted)] hover:text-white border border-[var(--line)]'}`}
+                      title={alerts[video.channel_id] ? "Alerts enabled for this channel" : "Create alert for this channel"}
+                    >
+                      {alerts[video.channel_id] ? <BellRing size={12} /> : <Bell size={12} />}
+                      <span className="hidden md:inline">Alert</span>
+                    </button>
+                  </div>
+                  
+                  <span className="text-[10px] text-[var(--muted)] font-mono">
+                    Multiplier: <strong className="text-[var(--accent)] font-bold">{video.outlier_multiplier.toFixed(1)}x</strong>
+                  </span>
+                </div>
               </div>
-            </div>
-          </div>
-        );
-      })}
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
 
       {/* Embedded YouTube Modal */}
       {selectedVideo && (

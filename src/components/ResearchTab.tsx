@@ -718,115 +718,129 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
         <>
           {sortedResults.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {sortedResults.map((video) => {
-                const isAlreadyAdded = watchlistChannelIds.includes(video.channel_id);
-                const isHighOutlier = video.outlier_multiplier >= 3.0;
-                const isGiantSlayer = video.subscriber_count < 50000 && video.view_count >= 1000000 && isWithinLast30Days(video.published_at);
+              <AnimatePresence mode="popLayout">
+                {sortedResults.map((video) => {
+                  const isAlreadyAdded = watchlistChannelIds.includes(video.channel_id);
+                  const isHighOutlier = video.outlier_multiplier >= 3.0;
+                  const isGiantSlayer = video.subscriber_count < 50000 && video.view_count >= 1000000 && isWithinLast30Days(video.published_at);
 
-                return (
-                  <div key={video.id} className={`card rounded-xl overflow-hidden relative flex flex-col group transition-all bg-[var(--card-bg)] border ${
-                    isGiantSlayer 
-                      ? 'border-amber-500/70 shadow-lg shadow-amber-500/5 hover:border-amber-400' 
-                      : 'border-[var(--line)] hover:border-[var(--accent)]'
-                  }`}>
-                    {/* Video Thumbnail Wrapper */}
-                    <a 
-                      href={`https://youtube.com/watch?v=${video.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="relative block aspect-video w-full overflow-hidden bg-slate-950 cursor-pointer border-b border-[var(--line)]/50"
+                  return (
+                    <motion.div 
+                      layout
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96 }}
+                      transition={{ 
+                        duration: 0.3, 
+                        ease: [0.16, 1, 0.3, 1], // elegant custom easeOut
+                        layout: { duration: 0.3, ease: 'easeInOut' }
+                      }}
+                      key={video.id} 
+                      className={`card rounded-xl overflow-hidden relative flex flex-col group transition-all bg-[var(--card-bg)] border ${
+                        isGiantSlayer 
+                          ? 'border-amber-500/70 shadow-lg shadow-amber-500/5 hover:border-amber-400' 
+                          : 'border-[var(--line)] hover:border-[var(--accent)]'
+                      }`}
                     >
-                      {video.thumbnail_url ? (
-                        <img 
-                          src={video.thumbnail_url} 
-                          alt={video.title} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-slate-900 flex items-center justify-center">
-                          <Play size={24} className="text-slate-600" />
-                        </div>
-                      )}
-                      
-                      {/* Hover Overlay */}
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center text-white shadow-lg transform scale-90 group-hover:scale-100 transition-all duration-200">
-                          <Play size={18} fill="currentColor" className="ml-0.5" />
-                        </div>
-                      </div>
-
-                      {/* Duration Badge */}
-                      <span className="absolute bottom-2 right-2 text-[10px] bg-black/85 backdrop-blur-xs text-slate-200 px-1.5 py-0.5 rounded font-mono font-bold border border-white/10">
-                        {formatDuration(video.duration_seconds)}
-                      </span>
-                    </a>
-
-                    <div className="p-4 flex flex-col flex-1">
-                      {/* Top Badges Row */}
-                      <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
-                        <div className={`outlier-badge text-xs px-2 py-0.5 rounded font-bold flex items-center gap-1 shadow-md ${
-                          isHighOutlier ? 'bg-[var(--accent)] text-white animate-pulse' : 'bg-[#1e293b] text-slate-300 border border-[var(--line)]'
-                        }`}>
-                          {video.outlier_multiplier.toFixed(1)}x {isHighOutlier && <Sparkles size={11} />}
-                        </div>
-                        {isGiantSlayer && (
-                          <div className="bg-gradient-to-r from-amber-500 to-red-600 text-white text-[10px] px-2 py-0.5 rounded font-extrabold flex items-center gap-1 shadow-md animate-pulse">
-                            <Flame size={10} /> GIANT SLAYER
-                          </div>
-                        )}
-                        <span className="text-[10px] text-slate-500 font-mono ml-auto">
-                          ID: {video.id}
-                        </span>
-                      </div>
-
+                      {/* Video Thumbnail Wrapper */}
                       <a 
                         href={`https://youtube.com/watch?v=${video.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-semibold text-sm md:text-[0.95rem] leading-snug line-clamp-2 h-[2.5rem] mb-2 text-[var(--ink)] hover:text-[var(--accent)] transition-colors block"
-                        title={video.title}
+                        className="relative block aspect-video w-full overflow-hidden bg-slate-950 cursor-pointer border-b border-[var(--line)]/50"
                       >
-                        {video.title}
-                      </a>
-
-                      <div className="text-xs text-[var(--muted)] flex justify-between items-center mb-4 font-mono">
-                        <span>{formatNumber(video.view_count)} views · {new Date(video.published_at).toLocaleDateString()}</span>
-                      </div>
-
-                      <div className="mt-auto pt-3 border-t border-[var(--line)]/50 flex items-center justify-between">
-                        <div className="overflow-hidden pr-2">
-                          <a
-                            href={`https://youtube.com/channel/${video.channel_id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`font-semibold text-xs truncate hover:underline block ${isGiantSlayer ? 'text-amber-400' : 'text-[var(--accent)]'}`}
-                          >
-                            {video.channel_name}
-                          </a>
-                          <div className="text-[0.7rem] text-[var(--muted)] font-mono">
-                            {formatNumber(video.subscriber_count)} subs
+                        {video.thumbnail_url ? (
+                          <img 
+                            src={video.thumbnail_url} 
+                            alt={video.title} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-slate-900 flex items-center justify-center">
+                            <Play size={24} className="text-slate-600" />
+                          </div>
+                        )}
+                        
+                        {/* Hover Overlay */}
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center text-white shadow-lg transform scale-90 group-hover:scale-100 transition-all duration-200">
+                            <Play size={18} fill="currentColor" className="ml-0.5" />
                           </div>
                         </div>
 
-                        <button
-                          disabled={isAlreadyAdded || addingId === video.channel_id}
-                          onClick={() => handleAdd(video.channel_id)}
-                          className={`text-xs px-3 py-1.5 rounded font-semibold transition-all cursor-pointer ${
-                            isAlreadyAdded
-                              ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-900/30 cursor-not-allowed'
-                              : isGiantSlayer
-                                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold'
-                                : 'bg-[var(--line)] hover:bg-[#2e3e56] text-[var(--ink)]'
-                          }`}
+                        {/* Duration Badge */}
+                        <span className="absolute bottom-2 right-2 text-[10px] bg-black/85 backdrop-blur-xs text-slate-200 px-1.5 py-0.5 rounded font-mono font-bold border border-white/10">
+                          {formatDuration(video.duration_seconds)}
+                        </span>
+                      </a>
+
+                      <div className="p-4 flex flex-col flex-1">
+                        {/* Top Badges Row */}
+                        <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+                          <div className={`outlier-badge text-xs px-2 py-0.5 rounded font-bold flex items-center gap-1 shadow-md ${
+                            isHighOutlier ? 'bg-[var(--accent)] text-white animate-pulse' : 'bg-[#1e293b] text-slate-300 border border-[var(--line)]'
+                          }`}>
+                            {video.outlier_multiplier.toFixed(1)}x {isHighOutlier && <Sparkles size={11} />}
+                          </div>
+                          {isGiantSlayer && (
+                            <div className="bg-gradient-to-r from-amber-500 to-red-600 text-white text-[10px] px-2 py-0.5 rounded font-extrabold flex items-center gap-1 shadow-md animate-pulse">
+                              <Flame size={10} /> GIANT SLAYER
+                            </div>
+                          )}
+                          <span className="text-[10px] text-slate-500 font-mono ml-auto">
+                            ID: {video.id}
+                          </span>
+                        </div>
+
+                        <a 
+                          href={`https://youtube.com/watch?v=${video.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-sm md:text-[0.95rem] leading-snug line-clamp-2 h-[2.5rem] mb-2 text-[var(--ink)] hover:text-[var(--accent)] transition-colors block"
+                          title={video.title}
                         >
-                          {isAlreadyAdded ? '✓ Tracked' : addingId === video.channel_id ? 'Adding...' : '+ Track Competitor'}
-                        </button>
+                          {video.title}
+                        </a>
+
+                        <div className="text-xs text-[var(--muted)] flex justify-between items-center mb-4 font-mono">
+                          <span>{formatNumber(video.view_count)} views · {new Date(video.published_at).toLocaleDateString()}</span>
+                        </div>
+
+                        <div className="mt-auto pt-3 border-t border-[var(--line)]/50 flex items-center justify-between">
+                          <div className="overflow-hidden pr-2">
+                            <a
+                              href={`https://youtube.com/channel/${video.channel_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`font-semibold text-xs truncate hover:underline block ${isGiantSlayer ? 'text-amber-400' : 'text-[var(--accent)]'}`}
+                            >
+                              {video.channel_name}
+                            </a>
+                            <div className="text-[0.7rem] text-[var(--muted)] font-mono">
+                              {formatNumber(video.subscriber_count)} subs
+                            </div>
+                          </div>
+
+                          <button
+                            disabled={isAlreadyAdded || addingId === video.channel_id}
+                            onClick={() => handleAdd(video.channel_id)}
+                            className={`text-xs px-3 py-1.5 rounded font-semibold transition-all cursor-pointer ${
+                              isAlreadyAdded
+                                ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-900/30 cursor-not-allowed'
+                                : isGiantSlayer
+                                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold'
+                                  : 'bg-[var(--line)] hover:bg-[#2e3e56] text-[var(--ink)]'
+                            }`}
+                          >
+                            {isAlreadyAdded ? '✓ Tracked' : addingId === video.channel_id ? 'Adding...' : '+ Track Competitor'}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
             </div>
           ) : (
             <div className="text-center py-16 border border-dashed border-[var(--line)] rounded-xl max-w-2xl mx-auto bg-[#0b0f17]/30">
