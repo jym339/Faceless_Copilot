@@ -1345,79 +1345,122 @@ app.delete('/api/notes/:id', (req: any, res) => {
 // Store next page tokens for each search query to allow endless fresh pagination on Refresh Results
 const queryPageTokens = new Map<string, string>();
 
+function isYouTubeQuotaOrRateLimitError(err: any): string | null {
+  if (!err) return null;
+  const status = err.response?.status;
+  if (status === 429) {
+    return 'YouTube API Rate Limit reached (Status 429). Please reduce Scan Depth or wait before retrying.';
+  }
+  const errorObj = err.response?.data?.error;
+  if (errorObj) {
+    const message = errorObj.message || '';
+    if (message.toLowerCase().includes('quota') || message.toLowerCase().includes('limit') || message.toLowerCase().includes('exceeded')) {
+      return `YouTube API Quota/Limit Exceeded: ${message}. Try reducing Scan Depth or configure a new API key in Settings.`;
+    }
+    const errors = errorObj.errors;
+    if (Array.isArray(errors)) {
+      for (const e of errors) {
+        if (e.reason === 'quotaExceeded' || e.reason === 'rateLimitExceeded') {
+          return `YouTube API Quota/Limit Exceeded: ${e.message || 'The request cannot be completed because you have exceeded your quota.'}`;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 app.post('/api/research', async (req: any, res) => {
-  const { query, refresh } = req.body;
+  const { query, refresh, publishedAge, limit } = req.body;
   const key = getApiKey(req.userId);
   if (!key) return res.status(400).json({ error: 'YouTube API Key is not configured. Configure it in Settings.' });
   if (!query) return res.status(400).json({ error: 'Query parameter is required' });
 
+  const maxResultsToAnalyze = parseInt(limit || '300', 10);
+
   try {
-    // 1. Search videos by keyword - Fetch up to 100 items by querying 2 pages of 50 each
+    // 1. Search videos by keyword - Fetch up to maxResultsToAnalyze items
     let items: any[] = [];
-    let nextPageToken: string | undefined = undefined;
 
     // Retrieve or clear stored page token based on refresh flag
     let startPageToken: string | undefined = undefined;
+    const cacheKey = `${query}_${publishedAge || 'all'}`;
     if (refresh) {
-      startPageToken = queryPageTokens.get(query);
+      startPageToken = queryPageTokens.get(cacheKey);
     } else {
-      queryPageTokens.delete(query);
+      queryPageTokens.delete(cacheKey);
     }
 
-    // Page 1
-    const searchParams1: any = {
-      part: 'snippet',
-      q: query,
-      type: 'video',
-      maxResults: 50,
-      key
-    };
-    if (startPageToken) {
-      searchParams1.pageToken = startPageToken;
+    let publishedAfter: string | undefined = undefined;
+    const startOf2026 = new Date('2026-01-01T00:00:00Z').getTime();
+
+    if (publishedAge && publishedAge !== 'all') {
+      const now = Date.now();
+      let calculatedTime = now;
+      if (publishedAge === '24h') {
+        calculatedTime = now - 24 * 60 * 60 * 1000;
+      } else if (publishedAge === '7d') {
+        calculatedTime = now - 7 * 24 * 60 * 60 * 1000;
+      } else if (publishedAge === '30d') {
+        calculatedTime = now - 30 * 24 * 60 * 60 * 1000;
+      } else if (publishedAge === '90d') {
+        calculatedTime = now - 90 * 24 * 60 * 60 * 1000;
+      } else if (publishedAge === '365d') {
+        calculatedTime = now - 365 * 24 * 60 * 60 * 1000;
+      }
+      const finalTime = Math.max(calculatedTime, startOf2026);
+      publishedAfter = new Date(finalTime).toISOString();
+    } else {
+      publishedAfter = '2026-01-01T00:00:00Z';
     }
 
-    const searchRes1 = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-      params: searchParams1
-    });
-    incrementUserQuota(req.userId, 100);
-    if (searchRes1.data.items) {
-      items = [...searchRes1.data.items];
-      nextPageToken = searchRes1.data.nextPageToken;
-    }
+    let pageTokenToUse = startPageToken;
+    const pageSize = 50;
+    const maxPages = Math.ceil(maxResultsToAnalyze / pageSize);
 
-    let finalNextPageToken = nextPageToken;
-
-    // Page 2 (if available)
-    if (nextPageToken && items.length < 100) {
+    for (let page = 1; page <= maxPages; page++) {
       try {
-        const searchRes2 = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-          params: {
-            part: 'snippet',
-            q: query,
-            type: 'video',
-            maxResults: 50,
-            pageToken: nextPageToken,
-            key
-          }
-        });
-        incrementUserQuota(req.userId, 100);
-        if (searchRes2.data.items) {
-          items = [...items, ...searchRes2.data.items];
-          if (searchRes2.data.nextPageToken) {
-            finalNextPageToken = searchRes2.data.nextPageToken;
-          }
+        const params: any = {
+          part: 'snippet',
+          q: query,
+          type: 'video',
+          maxResults: pageSize,
+          key,
+        };
+        if (pageTokenToUse) {
+          params.pageToken = pageTokenToUse;
         }
-      } catch (err2) {
-        console.error('Error fetching second page of research search results:', err2);
+        if (publishedAfter) {
+          params.publishedAfter = publishedAfter;
+        }
+
+        const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', { params });
+        incrementUserQuota(req.userId, 100);
+
+        if (searchRes.data.items && searchRes.data.items.length > 0) {
+          items = [...items, ...searchRes.data.items];
+          pageTokenToUse = searchRes.data.nextPageToken;
+          if (!pageTokenToUse) {
+            break; // No more pages
+          }
+        } else {
+          break; // No items returned
+        }
+      } catch (err: any) {
+        console.error(`Error fetching page ${page} of research search results:`, err);
+        const quotaErr = isYouTubeQuotaOrRateLimitError(err);
+        if (quotaErr) {
+          throw new Error(quotaErr);
+        }
+        break;
       }
     }
 
     // Store the next page token for subsequent refreshes of this query
-    if (finalNextPageToken) {
-      queryPageTokens.set(query, finalNextPageToken);
+    if (pageTokenToUse) {
+      queryPageTokens.set(cacheKey, pageTokenToUse);
     } else {
       // If we ran out of pages, clear it so next refresh starts over
-      queryPageTokens.delete(query);
+      queryPageTokens.delete(cacheKey);
     }
 
     if (items.length === 0) return res.json([]);
@@ -1446,8 +1489,12 @@ app.post('/api/research', async (req: any, res) => {
         if (videosRes.data.items) {
           videosList = [...videosList, ...videosRes.data.items];
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error fetching video details chunk:', err);
+        const quotaErr = isYouTubeQuotaOrRateLimitError(err);
+        if (quotaErr) {
+          throw new Error(quotaErr);
+        }
       }
     }
 
@@ -1529,14 +1576,28 @@ app.post('/api/research', async (req: any, res) => {
             avg_views_shorts: defaultAvg
           });
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error batch fetching channels details:', err);
+        const quotaErr = isYouTubeQuotaOrRateLimitError(err);
+        if (quotaErr) {
+          throw new Error(quotaErr);
+        }
       }
     }
 
     // 4. Construct final payload
     const results = [];
     for (const v of videosList) {
+      const publishedAt = v.snippet?.publishedAt || '';
+      if (publishedAt) {
+        const year = new Date(publishedAt).getFullYear();
+        if (year < 2026) {
+          continue; // Skip videos not published in 2026 or later
+        }
+      } else {
+        continue; // Skip if no publication date
+      }
+
       const channelId = v.snippet?.channelId;
       const channelTitle = v.snippet?.channelTitle || 'Unknown';
       const dur = parseIsoDuration(v.contentDetails?.duration);
@@ -1570,7 +1631,9 @@ app.post('/api/research', async (req: any, res) => {
     res.json(results);
   } catch (error: any) {
     console.error('Research query error:', error.response?.data || error.message);
-    res.status(500).json({ error: error.response?.data?.error?.message || 'Error executing YouTube keyword research query' });
+    const quotaErr = isYouTubeQuotaOrRateLimitError(error);
+    const finalErrorMessage = quotaErr || error.response?.data?.error?.message || error.message || 'Error executing YouTube keyword research query';
+    res.status(error.response?.status || 500).json({ error: finalErrorMessage });
   }
 });
 

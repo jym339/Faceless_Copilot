@@ -3,7 +3,7 @@ import {
   Search, Plus, TrendingUp, AlertCircle, Sparkles, 
   SlidersHorizontal, ArrowUpDown, Filter, Eye, Users, 
   Play, Calendar, RotateCcw, X, RefreshCw, Flame, HelpCircle,
-  CheckCircle2, Loader2, Info, Download
+  CheckCircle2, Loader2, Info, Download, Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Video } from '../types';
@@ -45,9 +45,11 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
   const [formatFilter, setFormatFilter] = useState<'all' | 'long' | 'short'>('all');
   const [publishedAge, setPublishedAge] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('multiplier');
+  const [limit, setLimit] = useState<number>(300);
   
   // Custom Focus state for Giant Slayers (<50k subs & >1M views)
   const [giantSlayerFocus, setGiantSlayerFocus] = useState<boolean>(false);
+  const [overperformingFocus, setOverperformingFocus] = useState<boolean>(false);
 
   // Real-time progress visual feedback states
   const [progressPercent, setProgressPercent] = useState<number>(0);
@@ -72,7 +74,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
     fetchResearch(query);
   }, []);
 
-  const fetchResearch = async (searchQuery: string, isRefresh = false) => {
+  const fetchResearch = async (searchQuery: string, isRefresh = false, activeAge = publishedAge) => {
     if (!searchQuery.trim()) return;
     setLoading(true);
     setError('');
@@ -82,10 +84,9 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
     // Progress Simulation Intervals
     const steps = [
       { max: 15, step: 'Connecting to YouTube API & sending primary query...' },
-      { max: 35, step: 'Retrieving page 1 of search results (50 videos)...' },
-      { max: 55, step: 'Retrieving page 2 of search results (50 videos)...' },
-      { max: 75, step: 'Resolving comprehensive statistics (views, like count, duration)...' },
-      { max: 90, step: 'Batch querying subscriber data & processing custom URLs...' },
+      { max: 40, step: `Retrieving multiple pages of search results (scan depth: up to ${limit} videos)...` },
+      { max: 65, step: 'Resolving comprehensive statistics (views, like count, duration)...' },
+      { max: 85, step: 'Batch querying subscriber data & processing custom URLs...' },
       { max: 98, step: 'Calculating outlier multipliers & aligning database values...' }
     ];
 
@@ -114,7 +115,12 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ query: searchQuery.trim(), refresh: isRefresh }),
+        body: JSON.stringify({ 
+          query: searchQuery.trim(), 
+          refresh: isRefresh,
+          publishedAge: activeAge,
+          limit
+        }),
       });
       
       clearInterval(progressInterval);
@@ -129,27 +135,30 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
       }
 
       if (res.ok) {
-        // Deduplicate videos by ID to guarantee unique React keys
+        // Deduplicate videos by ID to guarantee unique React keys and ensure they were created in 2026 or later
         const uniqueVideos: Video[] = [];
         const seen = new Set<string>();
         if (Array.isArray(data)) {
           for (const item of data) {
             if (item && item.id && !seen.has(item.id)) {
-              seen.add(item.id);
-              uniqueVideos.push(item);
+              const publishedYear = item.published_at ? new Date(item.published_at).getFullYear() : 0;
+              if (publishedYear >= 2026) {
+                seen.add(item.id);
+                uniqueVideos.push(item);
+              }
             }
           }
         }
         setResults(uniqueVideos);
         setProgressPercent(100);
-        setProgressStep('Analysis complete! 100 items populated.');
+        setProgressStep(`Analysis complete! ${uniqueVideos.length} items populated.`);
         
         // Find how many Giant Slayers are in this new batch
         const giantSlayerCount = uniqueVideos.filter(v => v.subscriber_count < 50000 && v.view_count >= 1000000 && isWithinLast30Days(v.published_at)).length;
         if (giantSlayerCount > 0) {
-          showToast(`Research finished! Loaded 100 videos and found ${giantSlayerCount} Giant Slayers! ⚡`, 'success');
+          showToast(`Research finished! Loaded ${uniqueVideos.length} videos and found ${giantSlayerCount} Giant Slayers! ⚡`, 'success');
         } else {
-          showToast(`Research complete! Successfully analyzed 100 videos.`, 'success');
+          showToast(`Research complete! Successfully analyzed ${uniqueVideos.length} videos.`, 'success');
         }
       } else {
         setProgressPercent(0);
@@ -203,6 +212,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
     setPublishedAge('all');
     setSortBy('multiplier');
     setGiantSlayerFocus(false);
+    setOverperformingFocus(false);
   };
 
   const downloadCSV = () => {
@@ -289,12 +299,27 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
 
   // Pre-calculate count of Giant Slayers
   const totalGiantSlayersCount = results.filter(v => v.subscriber_count < 50000 && v.view_count >= 1000000 && isWithinLast30Days(v.published_at)).length;
+  // Pre-calculate count of Overperforming channels
+  const totalOverperformingCount = results.filter(v => v.subscriber_count < 100000 && v.view_count >= 100000).length;
 
   // Filter and sort computation
   const filteredResults = results.filter(video => {
+    // Force 2026 or later check unconditionally
+    if (video.published_at) {
+      const year = new Date(video.published_at).getFullYear();
+      if (year < 2026) return false;
+    } else {
+      return false;
+    }
+
     // If Giant Slayers focus is active, override standard filters
     if (giantSlayerFocus) {
       return video.subscriber_count < 50000 && video.view_count >= 1000000 && isWithinLast30Days(video.published_at);
+    }
+
+    // If Overperforming focus is active, override standard filters
+    if (overperformingFocus) {
+      return video.subscriber_count < 100000 && video.view_count >= 100000;
     }
 
     if (formatFilter !== 'all' && video.format !== formatFilter) return false;
@@ -456,12 +481,30 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
             className="w-full bg-[var(--card-bg)] border border-[var(--line)] text-[var(--ink)] pl-10 pr-4 py-2.5 rounded-lg text-sm outline-none focus:border-[var(--accent)]"
           />
         </div>
+
+        {/* Scan Depth Dropdown */}
+        <div className="flex items-center bg-[#121824] border border-[var(--line)] rounded-lg px-2 shrink-0">
+          <label className="text-[10px] font-bold font-mono text-[var(--muted)] uppercase tracking-wider px-1 shrink-0">
+            Scan Depth:
+          </label>
+          <select
+            value={limit}
+            onChange={(e) => setLimit(Number(e.target.value))}
+            className="bg-transparent text-slate-300 text-xs rounded-lg py-1 outline-none cursor-pointer font-mono font-bold"
+          >
+            <option value="100">100 videos</option>
+            <option value="200">200 videos</option>
+            <option value="300">300 videos</option>
+            <option value="500">500 videos</option>
+          </select>
+        </div>
+
         <button
           type="submit"
           disabled={loading}
           className="bg-[var(--accent)] hover:opacity-90 text-white font-semibold px-6 py-2.5 rounded-lg text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
         >
-          {loading ? 'Sniping 100 Videos...' : 'Snipe Niches'}
+          {loading ? `Sniping ${limit} Videos...` : 'Snipe Niches'}
         </button>
       </form>
 
@@ -500,7 +543,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
               <span>{progressStep}</span>
             </div>
             <p className="text-xs text-[var(--muted)] font-mono">
-              Analyzing 100 videos across YouTube search, detailed duration statistics, and subscriber size database maps.
+              Analyzing up to {limit} videos across YouTube search, detailed duration statistics, and subscriber size database maps.
             </p>
           </div>
 
@@ -508,14 +551,13 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
           <div className="space-y-2 mt-6 border-t border-slate-800/80 pt-4">
             {[
               { label: 'Connecting & Authenticating with YouTube API', threshold: 15 },
-              { label: 'Extracting search results Page 1 (first 50 videos)', threshold: 35 },
-              { label: 'Extracting search results Page 2 (next 50 videos)', threshold: 55 },
-              { label: 'Resolving full details (durations, views, titles)', threshold: 75 },
-              { label: 'Resolving channel sizes, subscribers & handles', threshold: 90 },
+              { label: `Extracting search results (up to ${limit} videos)`, threshold: 40 },
+              { label: 'Resolving full details (durations, views, titles)', threshold: 65 },
+              { label: 'Resolving channel sizes, subscribers & handles', threshold: 85 },
               { label: 'Finalizing outlier multipliers & SQLite caching', threshold: 98 },
             ].map((s, index) => {
               const isCompleted = progressPercent >= s.threshold;
-              const isActive = !isCompleted && (index === 0 || progressPercent >= (index > 0 ? [15, 35, 55, 75, 90, 98][index - 1] : 0));
+              const isActive = !isCompleted && (index === 0 || progressPercent >= (index > 0 ? [15, 40, 65, 85, 98][index - 1] : 0));
               return (
                 <div key={index} className="flex items-center justify-between text-xs font-mono">
                   <div className="flex items-center gap-2">
@@ -556,13 +598,15 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
               </span>
             </div>
 
-            {/* Giant Slayers Focus Toggle Option (subs < 50k & views > 1M) */}
-            <div className="flex items-center gap-3">
+            {/* Giant Slayers & Overperforming Focus Toggle Options */}
+            <div className="flex items-center gap-3 flex-wrap">
               <button
                 type="button"
                 onClick={() => {
-                  setGiantSlayerFocus(!giantSlayerFocus);
-                  if (!giantSlayerFocus) {
+                  const nextVal = !giantSlayerFocus;
+                  setGiantSlayerFocus(nextVal);
+                  if (nextVal) {
+                    setOverperformingFocus(false);
                     // Set friendly helper selections
                     setMaxSubs('50000');
                     setMinViews('1000000');
@@ -583,7 +627,34 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                 )}
               </button>
 
-              {(maxSubs !== 'all' || minViews !== 'all' || minMultiplier !== 'all' || formatFilter !== 'all' || publishedAge !== 'all' || sortBy !== 'multiplier' || giantSlayerFocus) && (
+              <button
+                type="button"
+                onClick={() => {
+                  const nextVal = !overperformingFocus;
+                  setOverperformingFocus(nextVal);
+                  if (nextVal) {
+                    setGiantSlayerFocus(false);
+                    // Set friendly helper selections for overperformers
+                    setMaxSubs('100000');
+                    setMinViews('100000');
+                  }
+                }}
+                className={`flex items-center gap-2 text-xs px-3.5 py-1.5 rounded-lg border font-mono font-semibold transition-all cursor-pointer ${
+                  overperformingFocus 
+                    ? 'bg-violet-950/50 text-violet-300 border-violet-500 animate-pulse'
+                    : 'bg-[#121824] text-slate-400 border-[var(--line)] hover:text-white'
+                }`}
+              >
+                <Zap size={14} className={overperformingFocus ? 'text-violet-400' : 'text-slate-500'} />
+                Focus on Overperformers (&lt;100k subs, &gt;100k views)
+                {totalOverperformingCount > 0 && (
+                  <span className="bg-violet-500 text-white px-1.5 py-0.2 text-[9px] rounded font-bold ml-1">
+                    {totalOverperformingCount} Found
+                  </span>
+                )}
+              </button>
+
+              {(maxSubs !== 'all' || minViews !== 'all' || minMultiplier !== 'all' || formatFilter !== 'all' || publishedAge !== 'all' || sortBy !== 'multiplier' || giantSlayerFocus || overperformingFocus) && (
                 <button
                   onClick={handleResetFilters}
                   className="text-[10px] font-bold font-mono text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer transition-all"
@@ -595,7 +666,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
             </div>
           </div>
 
-          <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 ${giantSlayerFocus ? 'opacity-45 pointer-events-none' : ''}`}>
+          <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 ${(giantSlayerFocus || overperformingFocus) ? 'opacity-45 pointer-events-none' : ''}`}>
             {/* 1. Subscriber Count (Max Limit) */}
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] font-bold font-mono text-[var(--muted)] uppercase tracking-wider flex items-center gap-1">
@@ -693,22 +764,34 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
               </label>
               <select
                 value={publishedAge}
-                onChange={(e) => setPublishedAge(e.target.value)}
+                onChange={(e) => {
+                  const newAge = e.target.value;
+                  setPublishedAge(newAge);
+                  if (query.trim() && results.length > 0) {
+                    fetchResearch(query, false, newAge);
+                  }
+                }}
                 className="bg-[#121824] border border-[var(--line)] text-slate-300 text-xs rounded-lg p-2 outline-none focus:border-[var(--accent)] transition-all cursor-pointer font-mono"
               >
-                <option value="all">Any Upload Date</option>
+                <option value="all">Any Date in 2026</option>
                 <option value="24h">Last 24 hours</option>
                 <option value="7d">Last 7 days</option>
                 <option value="30d">Last 30 days (1 month)</option>
                 <option value="90d">Last 90 days (3 months)</option>
-                <option value="365d">Last year</option>
+                <option value="365d">Since Jan 1, 2026</option>
               </select>
             </div>
           </div>
           {giantSlayerFocus && (
             <div className="mt-3 text-xs text-amber-300 font-mono flex items-center gap-1.5 bg-amber-950/20 border border-amber-900/30 p-2.5 rounded-lg">
               <Flame size={13} className="animate-bounce" />
-              <span>Giant Slayer mode active: Filtering 100 sniped videos to prioritize small channels (<strong>&lt; 50k subs</strong>) with explosive views (<strong>&gt; 1M views</strong>) uploaded in the last 30 days. Normal filter deck has been focused.</span>
+              <span>Giant Slayer mode active: Filtering {results.length} sniped videos to prioritize small channels (<strong>&lt; 50k subs</strong>) with explosive views (<strong>&gt; 1M views</strong>) uploaded in the last 30 days. Normal filter deck has been focused.</span>
+            </div>
+          )}
+          {overperformingFocus && (
+            <div className="mt-3 text-xs text-violet-300 font-mono flex items-center gap-1.5 bg-violet-950/20 border border-violet-900/30 p-2.5 rounded-lg">
+              <Zap size={13} className="animate-bounce text-violet-400" />
+              <span>Overperformer mode active: Filtering {results.length} sniped videos to prioritize small channels (<strong>&lt; 100k subs</strong>) with high views (<strong>&gt; 100k views</strong>). These videos are overperforming their sub count!</span>
             </div>
           )}
         </div>
@@ -723,6 +806,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                   const isAlreadyAdded = watchlistChannelIds.includes(video.channel_id);
                   const isHighOutlier = video.outlier_multiplier >= 3.0;
                   const isGiantSlayer = video.subscriber_count < 50000 && video.view_count >= 1000000 && isWithinLast30Days(video.published_at);
+                  const isOverperformer = video.subscriber_count < 100000 && video.view_count >= 100000;
 
                   return (
                     <motion.div 
@@ -739,7 +823,9 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                       className={`card rounded-xl overflow-hidden relative flex flex-col group transition-all bg-[var(--card-bg)] border ${
                         isGiantSlayer 
                           ? 'border-amber-500/70 shadow-lg shadow-amber-500/5 hover:border-amber-400' 
-                          : 'border-[var(--line)] hover:border-[var(--accent)]'
+                          : isOverperformer
+                            ? 'border-violet-500/70 shadow-lg shadow-violet-500/5 hover:border-violet-400'
+                            : 'border-[var(--line)] hover:border-[var(--accent)]'
                       }`}
                     >
                       {/* Video Thumbnail Wrapper */}
@@ -788,6 +874,11 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                               <Flame size={10} /> GIANT SLAYER
                             </div>
                           )}
+                          {isOverperformer && !isGiantSlayer && (
+                            <div className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-[10px] px-2 py-0.5 rounded font-extrabold flex items-center gap-1 shadow-md animate-pulse">
+                              <Zap size={10} /> OVERPERFORMER
+                            </div>
+                          )}
                           <span className="text-[10px] text-slate-500 font-mono ml-auto">
                             ID: {video.id}
                           </span>
@@ -813,7 +904,13 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                               href={`https://youtube.com/channel/${video.channel_id}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className={`font-semibold text-xs truncate hover:underline block ${isGiantSlayer ? 'text-amber-400' : 'text-[var(--accent)]'}`}
+                              className={`font-semibold text-xs truncate hover:underline block ${
+                                isGiantSlayer 
+                                  ? 'text-amber-400' 
+                                  : isOverperformer
+                                    ? 'text-violet-400 font-semibold'
+                                    : 'text-[var(--accent)]'
+                              }`}
                             >
                               {video.channel_name}
                             </a>
@@ -830,7 +927,9 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                                 ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-900/30 cursor-not-allowed'
                                 : isGiantSlayer
                                   ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold'
-                                  : 'bg-[var(--line)] hover:bg-[#2e3e56] text-[var(--ink)]'
+                                  : isOverperformer
+                                    ? 'bg-violet-600 hover:bg-violet-500 text-white font-bold'
+                                    : 'bg-[var(--line)] hover:bg-[#2e3e56] text-[var(--ink)]'
                             }`}
                           >
                             {isAlreadyAdded ? '✓ Tracked' : addingId === video.channel_id ? 'Adding...' : '+ Track Competitor'}
@@ -847,7 +946,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
               <Filter className="mx-auto text-[var(--muted)] mb-3 opacity-40" size={32} />
               <h3 className="text-sm font-semibold text-white mb-1">No matching results</h3>
               <p className="text-xs text-[var(--muted)] font-mono max-w-xs mx-auto mb-4">
-                No sniped videos match your active filter configuration. Relax your criteria or toggle off Giant Slayers focus.
+                No sniped videos match your active filter configuration. Relax your criteria or toggle off active focus modes.
               </p>
               <button
                 onClick={handleResetFilters}
