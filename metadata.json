@@ -1,0 +1,8 @@
+{
+  "name": "Niche Monitor",
+  "description": "Competitive intelligence dashboard for monitoring YouTube niches, discovering new channels, and finding outlier videos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
