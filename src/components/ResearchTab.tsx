@@ -679,6 +679,39 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                       ? 'border-amber-500/70 shadow-lg shadow-amber-500/5 hover:border-amber-400' 
                       : 'border-[var(--line)] hover:border-[var(--accent)]'
                   }`}>
+                    {/* Video Thumbnail Wrapper */}
+                    <a 
+                      href={`https://youtube.com/watch?v=${video.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative block aspect-video w-full overflow-hidden bg-slate-950 cursor-pointer border-b border-[var(--line)]/50"
+                    >
+                      {video.thumbnail_url ? (
+                        <img 
+                          src={video.thumbnail_url} 
+                          alt={video.title} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-slate-900 flex items-center justify-center">
+                          <Play size={24} className="text-slate-600" />
+                        </div>
+                      )}
+                      
+                      {/* Hover Overlay */}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center text-white shadow-lg transform scale-90 group-hover:scale-100 transition-all duration-200">
+                          <Play size={18} fill="currentColor" className="ml-0.5" />
+                        </div>
+                      </div>
+
+                      {/* Duration Badge */}
+                      <span className="absolute bottom-2 right-2 text-[10px] bg-black/85 backdrop-blur-xs text-slate-200 px-1.5 py-0.5 rounded font-mono font-bold border border-white/10">
+                        {formatDuration(video.duration_seconds)}
+                      </span>
+                    </a>
+
                     <div className="p-4 flex flex-col flex-1">
                       {/* Top Badges Row */}
                       <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
@@ -692,14 +725,20 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                             <Flame size={10} /> GIANT SLAYER
                           </div>
                         )}
-                        <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono ml-auto">
-                          {formatDuration(video.duration_seconds)}
+                        <span className="text-[10px] text-slate-500 font-mono ml-auto">
+                          ID: {video.id}
                         </span>
                       </div>
 
-                      <h3 className="font-semibold text-[0.95rem] leading-relaxed line-clamp-2 h-[2.8rem] mb-2 text-[var(--ink)] group-hover:text-[var(--accent)] transition-colors" title={video.title}>
+                      <a 
+                        href={`https://youtube.com/watch?v=${video.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-sm md:text-[0.95rem] leading-snug line-clamp-2 h-[2.5rem] mb-2 text-[var(--ink)] hover:text-[var(--accent)] transition-colors block"
+                        title={video.title}
+                      >
                         {video.title}
-                      </h3>
+                      </a>
 
                       <div className="text-xs text-[var(--muted)] flex justify-between items-center mb-4 font-mono">
                         <span>{formatNumber(video.view_count)} views · {new Date(video.published_at).toLocaleDateString()}</span>
@@ -707,9 +746,14 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
 
                       <div className="mt-auto pt-3 border-t border-[var(--line)]/50 flex items-center justify-between">
                         <div className="overflow-hidden pr-2">
-                          <div className={`font-semibold text-xs truncate ${isGiantSlayer ? 'text-amber-400' : 'text-[var(--accent)]'}`}>
+                          <a
+                            href={`https://youtube.com/channel/${video.channel_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`font-semibold text-xs truncate hover:underline block ${isGiantSlayer ? 'text-amber-400' : 'text-[var(--accent)]'}`}
+                          >
                             {video.channel_name}
-                          </div>
+                          </a>
                           <div className="text-[0.7rem] text-[var(--muted)] font-mono">
                             {formatNumber(video.subscriber_count)} subs
                           </div>
