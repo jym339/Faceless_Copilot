@@ -175,6 +175,49 @@ export default function App() {
     }
   };
 
+  const checkAlertLogs = async () => {
+    if (!user) return;
+    try {
+      const res = await authFetch('/api/alert-logs');
+      if (res.ok) {
+        const logs = await res.json();
+        const unreadLogs = logs.filter((l: any) => l.is_read === 0);
+        if (unreadLogs.length > 0) {
+          if (Notification.permission === 'granted') {
+            unreadLogs.forEach((log: any) => {
+              new Notification(`Outlier Alert: ${log.channel_name}`, {
+                body: log.message,
+                icon: log.thumbnail_url || log.avatar_url
+              });
+            });
+          } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(permission => {
+              if (permission === 'granted') {
+                unreadLogs.forEach((log: any) => {
+                  new Notification(`Outlier Alert: ${log.channel_name}`, {
+                    body: log.message,
+                    icon: log.thumbnail_url || log.avatar_url
+                  });
+                });
+              }
+            });
+          }
+          await authFetch('/api/alert-logs/read', { method: 'POST' });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch alert logs', err);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      const interval = setInterval(checkAlertLogs, 30000); // Check every 30s
+      checkAlertLogs(); // Check immediately on mount
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
   // Check login state on mount
   const checkLogin = async () => {
     try {

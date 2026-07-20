@@ -521,12 +521,27 @@ async function fetchChannelVideos(channelId: string, userId: string = 'guest') {
         outlier_multiplier = excluded.outlier_multiplier
     `);
     
+    // Fetch alerts for this user and channel
+    const alert = db.prepare('SELECT * FROM alerts WHERE user_id = ? AND channel_id = ?').get(userId, channelId) as any;
+
     const tx = db.transaction((videos: any[]) => {
       for (const v of videos) {
         let mult = 1.0;
         if (v.format === 'long' && avgLong > 0) mult = v.view_count / avgLong;
         if (v.format === 'short' && avgShort > 0) mult = v.view_count / avgShort;
+        
+        const existing = db.prepare('SELECT id FROM videos WHERE id = ?').get(v.id);
+        
         insertVideo.run(v.id, v.channel_id, v.title, v.thumbnail_url, v.published_at, v.duration_seconds, v.format, v.view_count, mult, v.discovered_at);
+
+        if (alert && !existing && mult >= alert.outlier_threshold) {
+          console.log(`[ALERT] Channel ${channelId} uploaded outlier video: ${v.title} (${mult.toFixed(1)}x)`);
+          const alertLogId = `${v.id}:${userId}`;
+          db.prepare(`
+            INSERT OR IGNORE INTO alert_logs (id, user_id, channel_id, video_id, outlier_multiplier, message, created_at, is_read)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+          `).run(alertLogId, userId, channelId, v.id, mult, `New outlier video (${mult.toFixed(1)}x): ${v.title}`, new Date().toISOString());
+        }
       }
     });
     
@@ -550,6 +565,70 @@ app.post('/api/refresh', async (req: any, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Error refreshing data' });
+  }
+});
+
+// ----------------------------------------------------
+// API: Alerts
+// ----------------------------------------------------
+app.get('/api/alerts', (req: any, res) => {
+  try {
+    const alerts = db.prepare('SELECT * FROM alerts WHERE user_id = ?').all(req.userId);
+    res.json(alerts);
+  } catch (err) {
+    res.status(500).json({ error: 'DB error' });
+  }
+});
+
+app.post('/api/alerts', (req: any, res) => {
+  const { channel_id, outlier_threshold } = req.body;
+  const id = `${req.userId}:${channel_id}`;
+  try {
+    db.prepare(`
+      INSERT INTO alerts (id, user_id, channel_id, outlier_threshold, created_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        outlier_threshold = excluded.outlier_threshold
+    `).run(id, req.userId, channel_id, outlier_threshold || 1.5, new Date().toISOString());
+    res.json({ success: true, alert: { id, channel_id, outlier_threshold } });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/alerts/:channelId', (req: any, res) => {
+  const { channelId } = req.params;
+  const id = `${req.userId}:${channelId}`;
+  try {
+    db.prepare('DELETE FROM alerts WHERE id = ? AND user_id = ?').run(id, req.userId);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/alert-logs', (req: any, res) => {
+  try {
+    const logs = db.prepare(`
+      SELECT l.*, c.title as channel_name, c.avatar_url, v.thumbnail_url 
+      FROM alert_logs l
+      JOIN channels c ON l.channel_id = c.id
+      JOIN videos v ON l.video_id = v.id
+      WHERE l.user_id = ?
+      ORDER BY l.created_at DESC LIMIT 50
+    `).all(req.userId);
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: 'DB error' });
+  }
+});
+
+app.post('/api/alert-logs/read', (req: any, res) => {
+  try {
+    db.prepare('UPDATE alert_logs SET is_read = 1 WHERE user_id = ?').run(req.userId);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

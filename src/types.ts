@@ -29,3 +29,11 @@ export interface Video {
   discovered_at: string;
   is_ignored: boolean;
 }
+
+export interface Alert {
+  id: string;
+  user_id: string;
+  channel_id: string;
+  outlier_threshold: number;
+  created_at: string;
+}

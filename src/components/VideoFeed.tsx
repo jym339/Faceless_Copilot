@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { formatDistanceToNow, isToday, isYesterday, isThisWeek } from 'date-fns';
-import { X, ExternalLink, Play } from 'lucide-react';
-import { Video } from '../types';
+import { X, ExternalLink, Play, Bell, BellRing } from 'lucide-react';
+import { Video, Alert } from '../types';
 
 interface VideoFeedProps {
   videos: Video[];
@@ -10,6 +10,69 @@ interface VideoFeedProps {
 
 export default function VideoFeed({ videos, onIgnore }: VideoFeedProps) {
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const [alerts, setAlerts] = useState<Record<string, Alert>>({});
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const token = localStorage.getItem('oauth_token');
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json'
+        };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        const res = await fetch('/api/alerts', { headers });
+        if (res.ok) {
+          const data = await res.json();
+          const alertMap: Record<string, Alert> = {};
+          data.forEach((a: Alert) => {
+            alertMap[a.channel_id] = a;
+          });
+          setAlerts(alertMap);
+        }
+      } catch (err) {
+        console.error('Failed to fetch alerts:', err);
+      }
+    };
+    fetchAlerts();
+  }, []);
+
+  const toggleAlert = async (channelId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const token = localStorage.getItem('oauth_token');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      if (alerts[channelId]) {
+        // Delete alert
+        const res = await fetch(`/api/alerts/${channelId}`, { method: 'DELETE', headers });
+        if (res.ok) {
+          const newAlerts = { ...alerts };
+          delete newAlerts[channelId];
+          setAlerts(newAlerts);
+        }
+      } else {
+        // Create alert
+        const res = await fetch('/api/alerts', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ channel_id: channelId, outlier_threshold: 1.5 })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAlerts({ ...alerts, [channelId]: data.alert });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle alert:', err);
+    }
+  };
 
   const getFreshBadge = (dateString: string) => {
     const date = new Date(dateString);
@@ -154,6 +217,14 @@ export default function VideoFeed({ videos, onIgnore }: VideoFeedProps) {
                     className="bg-[var(--line)] text-white px-3 py-1 text-xs rounded hover:bg-[#334155] cursor-pointer transition-colors"
                   >
                     Ignore
+                  </button>
+                  <button
+                    onClick={(e) => toggleAlert(video.channel_id, e)}
+                    className={`px-3 py-1 text-xs rounded flex items-center gap-1 cursor-pointer transition-colors ${alerts[video.channel_id] ? 'bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]' : 'bg-transparent text-[var(--muted)] hover:text-white border border-[var(--line)]'}`}
+                    title={alerts[video.channel_id] ? "Alerts enabled for this channel" : "Create alert for this channel"}
+                  >
+                    {alerts[video.channel_id] ? <BellRing size={12} /> : <Bell size={12} />}
+                    <span className="hidden md:inline">Alert</span>
                   </button>
                 </div>
                 

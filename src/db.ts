@@ -57,6 +57,26 @@ db.exec(`
     updated_at TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS alerts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    channel_id TEXT,
+    outlier_threshold REAL,
+    created_at TEXT,
+    FOREIGN KEY(channel_id) REFERENCES channels(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS alert_logs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    channel_id TEXT,
+    video_id TEXT,
+    outlier_multiplier REAL,
+    message TEXT,
+    created_at TEXT,
+    is_read INTEGER DEFAULT 0
+  );
+
   CREATE TABLE IF NOT EXISTS ideas (
     id TEXT PRIMARY KEY,
     title TEXT,
