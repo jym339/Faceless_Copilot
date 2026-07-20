@@ -116,8 +116,17 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
         },
         body: JSON.stringify({ query: searchQuery.trim(), refresh: isRefresh }),
       });
-      const data = await res.json();
+      
       clearInterval(progressInterval);
+
+      let data: any;
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(text.substring(0, 100) || `Server returned status ${res.status}`);
+      }
 
       if (res.ok) {
         // Deduplicate videos by ID to guarantee unique React keys
@@ -148,10 +157,11 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
         setError(errorMsg);
         showToast(errorMsg, 'error');
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error('fetchResearch error details:', err);
       clearInterval(progressInterval);
       setProgressPercent(0);
-      const errorMsg = 'Network error. Check connection or console logs.';
+      const errorMsg = err instanceof Error ? `Error: ${err.message}` : 'Network error. Check connection or console logs.';
       setError(errorMsg);
       showToast(errorMsg, 'error');
     } finally {
