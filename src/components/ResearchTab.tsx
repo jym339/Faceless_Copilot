@@ -3,7 +3,7 @@ import {
   Search, Plus, TrendingUp, AlertCircle, Sparkles, 
   SlidersHorizontal, ArrowUpDown, Filter, Eye, Users, 
   Play, Calendar, RotateCcw, X, RefreshCw, Flame, HelpCircle,
-  CheckCircle2, Loader2, Info
+  CheckCircle2, Loader2, Info, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Video } from '../types';
@@ -190,6 +190,61 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
     setGiantSlayerFocus(false);
   };
 
+  const downloadCSV = () => {
+    if (sortedResults.length === 0) {
+      showToast('No videos available to export.', 'error');
+      return;
+    }
+
+    const headers = [
+      'Video ID',
+      'Title',
+      'Channel Name',
+      'Channel ID',
+      'Subscriber Count',
+      'View Count',
+      'Outlier Multiplier',
+      'Format',
+      'Duration (Seconds)',
+      'Published At',
+      'Thumbnail URL'
+    ];
+
+    const rows = sortedResults.map(v => [
+      v.id,
+      `"${(v.title || '').replace(/"/g, '""')}"`,
+      `"${(v.channel_name || '').replace(/"/g, '""')}"`,
+      v.channel_id || '',
+      v.subscriber_count || 0,
+      v.view_count || 0,
+      (v.outlier_multiplier || 1.0).toFixed(2),
+      v.format || 'long',
+      v.duration_seconds || 0,
+      v.published_at || '',
+      v.thumbnail_url || ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    
+    const sanitizedQuery = query.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'export';
+    const fileName = `youtube-research-${sanitizedQuery}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.setAttribute('download', fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast(`Successfully downloaded CSV with ${sortedResults.length} analyzed videos!`, 'success');
+  };
+
   const getSubLimit = (val: string) => {
     if (val === 'all') return Infinity;
     return parseInt(val, 10);
@@ -315,15 +370,26 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
         </div>
 
         {results.length > 0 && (
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="self-start md:self-auto flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--line)] bg-[var(--card-bg)] hover:bg-[#121824] transition-all text-xs font-semibold text-slate-300 cursor-pointer disabled:opacity-50"
-            title="Refresh the current search list of channels & video statistics"
-          >
-            <RefreshCw size={13} className={loading ? 'animate-spin text-[var(--accent)]' : 'text-slate-400'} />
-            Refresh Results
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+            <button
+              onClick={downloadCSV}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-950/10 hover:bg-emerald-950/30 text-emerald-300 transition-all text-xs font-semibold cursor-pointer disabled:opacity-50"
+              title="Download results as a CSV for offline analysis"
+            >
+              <Download size={13} className="text-emerald-400" />
+              Download CSV ({sortedResults.length})
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--line)] bg-[var(--card-bg)] hover:bg-[#121824] transition-all text-xs font-semibold text-slate-300 cursor-pointer disabled:opacity-50"
+              title="Refresh the current search list of channels & video statistics"
+            >
+              <RefreshCw size={13} className={loading ? 'animate-spin text-[var(--accent)]' : 'text-slate-400'} />
+              Refresh Results
+            </button>
+          </div>
         )}
       </div>
 
@@ -613,13 +679,11 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                       ? 'border-amber-500/70 shadow-lg shadow-amber-500/5 hover:border-amber-400' 
                       : 'border-[var(--line)] hover:border-[var(--accent)]'
                   }`}>
-                    <div className="relative aspect-video w-full bg-[#1a1e26]">
-                      <img src={video.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                      
+                    <div className="p-4 flex flex-col flex-1">
                       {/* Top Badges Row */}
-                      <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
-                        <div className={`outlier-badge text-xs px-2 py-1 rounded font-bold flex items-center gap-1 shadow-md ${
-                          isHighOutlier ? 'bg-[var(--accent)] text-white animate-pulse' : 'bg-[#1e293b] text-slate-300'
+                      <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+                        <div className={`outlier-badge text-xs px-2 py-0.5 rounded font-bold flex items-center gap-1 shadow-md ${
+                          isHighOutlier ? 'bg-[var(--accent)] text-white animate-pulse' : 'bg-[#1e293b] text-slate-300 border border-[var(--line)]'
                         }`}>
                           {video.outlier_multiplier.toFixed(1)}x {isHighOutlier && <Sparkles size={11} />}
                         </div>
@@ -628,15 +692,12 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
                             <Flame size={10} /> GIANT SLAYER
                           </div>
                         )}
+                        <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono ml-auto">
+                          {formatDuration(video.duration_seconds)}
+                        </span>
                       </div>
 
-                      <div className="absolute bottom-3 right-3 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded font-mono">
-                        {formatDuration(video.duration_seconds)}
-                      </div>
-                    </div>
-
-                    <div className="p-4 flex flex-col flex-1">
-                      <h3 className="font-semibold text-[0.95rem] leading-relaxed line-clamp-2 h-[2.8rem] mb-2" title={video.title}>
+                      <h3 className="font-semibold text-[0.95rem] leading-relaxed line-clamp-2 h-[2.8rem] mb-2 text-[var(--ink)] group-hover:text-[var(--accent)] transition-colors" title={video.title}>
                         {video.title}
                       </h3>
 

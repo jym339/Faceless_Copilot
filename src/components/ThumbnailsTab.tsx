@@ -14,7 +14,14 @@ export default function ThumbnailsTab() {
   const fetchOutliers = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/videos?format=${filterFormat}&window=90d`);
+      const token = localStorage.getItem('oauth_token');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/videos?format=${filterFormat}&window=90d`, { headers });
       const data = await res.json();
       if (Array.isArray(data)) {
         const outlierVids = data.filter((v: Video) => v.outlier_multiplier >= 1.2);
@@ -123,33 +130,22 @@ export default function ThumbnailsTab() {
                     key={v.id} 
                     className="group relative bg-[#0b0f17] border border-[var(--line)] rounded-2xl overflow-hidden flex flex-col justify-between transition-all hover:border-[var(--accent)]/60 shadow-lg"
                   >
-                    {/* Visual container */}
-                    <div className="relative aspect-video w-full bg-slate-950 overflow-hidden">
-                      <img 
-                        src={v.thumbnail_url} 
-                        alt={v.title} 
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
-                      />
-                      
-                      {/* Outlier tag */}
-                      <div className={`absolute top-3 left-3 text-[10px] font-extrabold px-2 py-0.5 rounded flex items-center gap-1 shadow-md ${
-                        isCrazyOutlier 
-                          ? 'bg-amber-500 text-slate-950 font-black animate-bounce' 
-                          : 'bg-slate-950/80 border border-slate-800 text-[var(--accent)]'
-                      }`}>
-                        {v.outlier_multiplier.toFixed(1)}x {isCrazyOutlier ? <Sparkles size={11} /> : 'Multiplier'}
-                      </div>
-
-                      {/* Views tag */}
-                      <div className="absolute bottom-3 right-3 bg-slate-950/85 px-2 py-0.5 rounded text-[9px] font-mono font-bold text-slate-300 border border-slate-800/50">
-                        {formatNumber(v.view_count)} views
-                      </div>
-                    </div>
-
                     {/* Info */}
                     <div className="p-4 flex-1 flex flex-col justify-between">
-                      <div className="text-xs font-semibold text-white line-clamp-2 leading-relaxed mb-3" title={v.title}>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className={`text-[10px] font-extrabold px-2 py-0.5 rounded flex items-center gap-1 ${
+                          isCrazyOutlier 
+                            ? 'bg-amber-500 text-slate-950 font-black' 
+                            : 'bg-[#121824] border border-[var(--line)] text-[var(--accent)]'
+                        }`}>
+                          {v.outlier_multiplier.toFixed(1)}x {isCrazyOutlier ? <Sparkles size={11} /> : 'Multiplier'}
+                        </div>
+                        <div className="text-[10px] font-mono text-[var(--muted)]">
+                          {formatNumber(v.view_count)} views
+                        </div>
+                      </div>
+
+                      <div className="text-sm md:text-base font-bold text-white line-clamp-3 leading-snug mb-4 group-hover:text-[var(--accent)] transition-colors duration-200" title={v.title}>
                         {v.title}
                       </div>
 

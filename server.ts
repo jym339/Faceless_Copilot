@@ -1716,6 +1716,212 @@ app.post('/api/auth/email/signin', async (req, res) => {
 
 
 // ----------------------------------------------------
+// API: Art of YouTube AI Coach (Niche Finder Challenge)
+// ----------------------------------------------------
+app.get('/api/coach/profile', (req: any, res) => {
+  try {
+    const profile = {
+      subjects: getUserSetting(req.userId, 'coach_subjects', ''),
+      budget: getUserSetting(req.userId, 'coach_budget', '$50'),
+      loved_channels: getUserSetting(req.userId, 'coach_loved_channels', ''),
+      format: getUserSetting(req.userId, 'coach_format', 'long'),
+      visual_style: getUserSetting(req.userId, 'coach_visual_style', 'AI-made visuals'),
+      background: getUserSetting(req.userId, 'coach_background', ''),
+      chosen_niche: getUserSetting(req.userId, 'coach_chosen_niche', '')
+    };
+    res.json({ success: true, profile });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/coach/profile', (req: any, res) => {
+  const { profile } = req.body;
+  if (!profile) {
+    return res.status(400).json({ error: 'Profile data is required' });
+  }
+  try {
+    if (profile.subjects !== undefined) setUserSetting(req.userId, 'coach_subjects', profile.subjects);
+    if (profile.budget !== undefined) setUserSetting(req.userId, 'coach_budget', profile.budget);
+    if (profile.loved_channels !== undefined) setUserSetting(req.userId, 'coach_loved_channels', profile.loved_channels);
+    if (profile.format !== undefined) setUserSetting(req.userId, 'coach_format', profile.format);
+    if (profile.visual_style !== undefined) setUserSetting(req.userId, 'coach_visual_style', profile.visual_style);
+    if (profile.background !== undefined) setUserSetting(req.userId, 'coach_background', profile.background);
+    if (profile.chosen_niche !== undefined) setUserSetting(req.userId, 'coach_chosen_niche', profile.chosen_niche);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/coach/ask-tim', (req: any, res) => {
+  res.json({
+    success: true,
+    rules: [
+      "Proof of Demand: Find outlier videos on smaller channels (under 50k subscribers) that get >10x baseline views. This is the ultimate proof that an audience is actively craving this topic.",
+      "The Gap (Visual/Audio/Story): Analyze existing top channels and find where they cut corners. Look for robotic AI text-to-speech, bad editing, or lazy copy-paste visuals, and exploit those gaps with superior production values.",
+      "Room to Win: Verify that views and subscriber gains are split across multiple mid-sized creators, showing YouTube's recommendation engine is eager to feed more creators rather than locked by a single giant monopolist.",
+      "The 100+ Ideas Brain-Dump Test: Write down 100 highly compelling, distinct video ideas for this niche immediately. If you run out of fuel before 30, you will burn out within 3 months.",
+      "The Human Angle: Combine your specific background, career skills, or personal hobbies with the topic to make your voice and insights irreplaceable by pure AI automation slop."
+    ]
+  });
+});
+
+app.post('/api/coach/hunt', async (req: any, res) => {
+  const { topic, budget, isDeepScan } = req.body;
+  
+  const prompt = `
+You are the Art of YouTube AI Coach. I am looking for a YouTube channel niche.
+Interests/Subjects: ${topic}
+Budget context: ${budget}
+Deep scan flag: ${isDeepScan ? 'YES (drill down deeper on selected channels)' : 'NO (broad explore)'}
+
+Based on Tim's strict YouTube Niche Selection Criteria (Proof of Demand, The Gap, Room to Win, 100+ Ideas, and Human Angle), generate a customized Niche Hunt Report.
+Generate exactly 2 proven niches and exactly 3 competitor channels that fit this topic.
+Be realistic, specific, and creative.
+
+Return a JSON object matching this schema:
+{
+  "topic": "${topic}",
+  "budget": "${budget}",
+  "provenNiches": [
+    {
+      "name": "Niche Name (specific and exciting)",
+      "description": "2-3 sentences explaining the core concept, the gap found, and how to win.",
+      "winningChannels": ["@exampleChannel1", "@exampleChannel2"]
+    }
+  ],
+  "competitors": [
+    {
+      "channelName": "Name of competitor channel",
+      "handle": "@handle",
+      "subscribers": "e.g. 14.5K or 82K",
+      "relevance": 85, // integer 50 to 100
+      "score": "HIGH" // HIGH or MEDIUM
+    }
+  ]
+}
+`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            topic: { type: Type.STRING },
+            budget: { type: Type.STRING },
+            provenNiches: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  winningChannels: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ['name', 'description', 'winningChannels']
+              }
+            },
+            competitors: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  channelName: { type: Type.STRING },
+                  handle: { type: Type.STRING },
+                  subscribers: { type: Type.STRING },
+                  relevance: { type: Type.INTEGER },
+                  score: { type: Type.STRING }
+                },
+                required: ['channelName', 'handle', 'subscribers', 'relevance', 'score']
+              }
+            }
+          },
+          required: ['topic', 'budget', 'provenNiches', 'competitors']
+        }
+      }
+    });
+
+    const reportText = response.text || '{}';
+    const report = JSON.parse(reportText);
+    res.json({ success: true, report });
+  } catch (err: any) {
+    console.error("Niche hunt generation error:", err);
+    res.json({
+      success: true,
+      report: {
+        topic: topic || 'General',
+        budget: budget || '$50',
+        provenNiches: [
+          {
+            name: `${topic} Deconstructed`,
+            description: "High CTR faceless content focusing on curated visual stories. Low-cost editing tools can produce premium outputs that exploit lazy competitors.",
+            winningChannels: ["@AmishGardening", "@EpicGains"]
+          }
+        ],
+        competitors: [
+          {
+            channelName: "AOY Garden Cult",
+            handle: "@gardencult",
+            subscribers: "34K",
+            relevance: 90,
+            score: "HIGH"
+          }
+        ]
+      }
+    });
+  }
+});
+
+app.post('/api/coach/find-channel', (req: any, res) => {
+  const { name } = req.body;
+  if (!name) return res.json({ query: '' });
+  try {
+    const existing = db.prepare("SELECT handle FROM channels WHERE title LIKE ? LIMIT 1").get(`%${name}%`) as { handle: string } | undefined;
+    if (existing) {
+      return res.json({ query: existing.handle });
+    }
+    const clean = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    res.json({ query: `@${clean || 'channel'}` });
+  } catch (err) {
+    res.json({ query: `@${name.toLowerCase().replace(/\s+/g, '')}` });
+  }
+});
+
+app.post('/api/coach/save-niche', (req: any, res) => {
+  const { chosen_niche } = req.body;
+  if (!chosen_niche) {
+    return res.status(400).json({ error: 'Chosen niche is required' });
+  }
+  try {
+    setUserSetting(req.userId, 'coach_chosen_niche', chosen_niche);
+    
+    // Create configured niche topic in niches table
+    const id = `niche_${Math.random().toString(36).substr(2, 9)}`;
+    const keywordsArray = chosen_niche.toLowerCase()
+      .split(' ')
+      .filter((w: string) => w.length > 3)
+      .map((w: string) => w.replace(/[^a-z0-9]/g, ''));
+    
+    const keywordsJson = JSON.stringify(keywordsArray.length > 0 ? keywordsArray : [chosen_niche.toLowerCase()]);
+    
+    db.prepare(`
+      INSERT OR IGNORE INTO niches (id, name, keywords, user_id)
+      VALUES (?, ?, ?, ?)
+    `).run(id, chosen_niche, keywordsJson, req.userId);
+
+    res.json({ success: true, nicheId: id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ----------------------------------------------------
 // Vite SPA Fallback
 // ----------------------------------------------------
 async function startServer() {

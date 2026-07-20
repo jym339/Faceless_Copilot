@@ -4,6 +4,11 @@
 @theme {
   --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "Courier New", Courier, monospace;
+  --color-ink: var(--ink);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-card-bg: var(--card-bg);
 }
 
 :root {

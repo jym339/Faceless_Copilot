@@ -11,6 +11,7 @@ import SettingsTab from './components/SettingsTab';
 import IdeasTab from './components/IdeasTab';
 import MyChannelTab from './components/MyChannelTab';
 import VerdictTab from './components/VerdictTab';
+import NicheCoachTab from './components/NicheCoachTab';
 import { Channel, Video } from './types';
 
 export default function App() {
@@ -54,7 +55,7 @@ export default function App() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [filterFormat, setFilterFormat] = useState<'all' | 'long' | 'short'>('all');
-  const [filterWindow, setFilterWindow] = useState<'7d' | '28d' | '90d'>('7d');
+  const [filterWindow, setFilterWindow] = useState<'7d' | '28d' | '90d'>('28d');
   const [sortOption, setSortOption] = useState<'outlier' | 'date' | 'views' | 'subs'>('outlier');
   const [searchQuery, setSearchQuery] = useState('');
   const [quotaUsed, setQuotaUsed] = useState(0);
@@ -320,6 +321,8 @@ export default function App() {
         return <MyChannelTab />;
       case 'verdict':
         return <VerdictTab />;
+      case 'coach':
+        return <NicheCoachTab onNavigateToResearch={() => setActiveTab('research')} />;
       case 'settings':
         return <SettingsTab />;
       case 'home':
@@ -426,7 +429,7 @@ export default function App() {
         {renderActiveTabContent()}
       </main>
 
-      {activeTab !== 'settings' && activeTab !== 'notes' && activeTab !== 'ideas' && activeTab !== 'my_channel' && activeTab !== 'verdict' && (
+      {activeTab !== 'settings' && activeTab !== 'notes' && activeTab !== 'ideas' && activeTab !== 'my_channel' && activeTab !== 'verdict' && activeTab !== 'coach' && (
         <Watchlist 
           channels={channels} 
           onAddChannel={handleAddChannel} 

@@ -284,11 +284,6 @@ export default function MyChannelTab() {
                       className="p-4 bg-[#121824] hover:bg-[#161d2b] border border-[var(--line)] rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all"
                     >
                       <div className="flex gap-4 items-center">
-                        <img
-                          src={vid.thumbnail_url}
-                          alt={vid.title}
-                          className="w-20 h-12 object-cover rounded border border-[var(--line)] shrink-0"
-                        />
                         <div>
                           <h4 className="text-xs font-bold text-[var(--ink)] leading-snug line-clamp-1">
                             {vid.title}

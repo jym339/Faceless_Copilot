@@ -19,6 +19,7 @@ export default function Sidebar({ activeTab, onTabChange, user, onLogin, onEmail
     { id: 'new_channels', label: 'Competitors', icon: Users },
     { id: 'thumbs', label: 'Thumbs', icon: Image },
     { id: 'niches', label: 'Proven Niches', icon: Folder },
+    { id: 'coach', label: 'Day 1 Niche Coach', icon: Sparkles },
   ];
 
   const secondaryNavItems = [
