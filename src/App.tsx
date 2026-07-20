@@ -12,6 +12,7 @@ import IdeasTab from './components/IdeasTab';
 import MyChannelTab from './components/MyChannelTab';
 import VerdictTab from './components/VerdictTab';
 import NicheCoachTab from './components/NicheCoachTab';
+import { Menu, Users, Sparkles } from 'lucide-react';
 import { Channel, Video } from './types';
 
 export default function App() {
@@ -52,6 +53,8 @@ export default function App() {
   };
 
   const [activeTab, setActiveTab] = useState<string>('home');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [mobileWatchlistOpen, setMobileWatchlistOpen] = useState(false);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [filterFormat, setFilterFormat] = useState<'all' | 'long' | 'short'>('all');
@@ -454,30 +457,100 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-full bg-[var(--bg)] text-[var(--ink)] overflow-hidden">
-      <Sidebar 
-        activeTab={activeTab} 
-        onTabChange={setActiveTab} 
-        user={user} 
-        onLogin={handleLogin} 
-        onEmailAuth={() => {
-          setAuthError('');
-          setShowEmailAuthModal(true);
-        }}
-        onLogout={handleLogout} 
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-      />
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex shrink-0">
+        <Sidebar 
+          activeTab={activeTab} 
+          onTabChange={setActiveTab} 
+          user={user} 
+          onLogin={handleLogin} 
+          onEmailAuth={() => {
+            setAuthError('');
+            setShowEmailAuthModal(true);
+          }}
+          onLogout={handleLogout} 
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+        />
+      </div>
       
       <main className="flex-1 flex flex-col h-full border-r border-[var(--line)] overflow-hidden">
+        {/* Mobile Header */}
+        <div className="md:hidden flex items-center justify-between p-3 border-b border-[var(--line)] bg-[#070a13] shrink-0">
+          <button 
+            onClick={() => setMobileSidebarOpen(true)}
+            className="p-1.5 hover:bg-[#121824] border border-[var(--line)] rounded-lg text-[var(--muted)] hover:text-white transition-colors cursor-pointer"
+          >
+            <Menu size={18} />
+          </button>
+          <div className="flex items-center gap-1.5">
+            <Sparkles size={14} className="text-amber-500 animate-pulse" />
+            <span className="font-bold text-xs text-white">Faceless Copilot</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--accent)]/10 text-[var(--accent)] font-semibold border border-[var(--accent)]/20 capitalize font-mono">
+              {activeTab.replace('_', ' ')}
+            </span>
+          </div>
+          {activeTab !== 'settings' && activeTab !== 'notes' && activeTab !== 'ideas' && activeTab !== 'my_channel' && activeTab !== 'verdict' && activeTab !== 'coach' ? (
+            <button 
+              onClick={() => setMobileWatchlistOpen(true)}
+              className="p-1.5 hover:bg-[#121824] border border-[var(--line)] rounded-lg text-[var(--muted)] hover:text-white transition-colors cursor-pointer"
+            >
+              <Users size={18} />
+            </button>
+          ) : (
+            <div className="w-8 h-8" />
+          )}
+        </div>
+
         {renderActiveTabContent()}
       </main>
 
+      {/* Desktop Watchlist */}
       {activeTab !== 'settings' && activeTab !== 'notes' && activeTab !== 'ideas' && activeTab !== 'my_channel' && activeTab !== 'verdict' && activeTab !== 'coach' && (
-        <Watchlist 
-          channels={channels} 
-          onAddChannel={handleAddChannel} 
-          onRefreshAll={handleRefreshAll} 
-        />
+        <div className="hidden lg:flex shrink-0">
+          <Watchlist 
+            channels={channels} 
+            onAddChannel={handleAddChannel} 
+            onRefreshAll={handleRefreshAll} 
+          />
+        </div>
+      )}
+
+      {/* Mobile Sidebar drawer */}
+      <div className={`fixed inset-0 z-50 md:hidden transition-opacity duration-300 ${mobileSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-xs" onClick={() => setMobileSidebarOpen(false)} />
+        <div className={`absolute top-0 bottom-0 left-0 w-[240px] bg-[#05070a] border-r border-[var(--line)] transition-transform duration-300 transform ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+          <Sidebar 
+            activeTab={activeTab} 
+            onTabChange={(tab) => {
+              setActiveTab(tab);
+              setMobileSidebarOpen(false);
+            }} 
+            user={user} 
+            onLogin={handleLogin} 
+            onEmailAuth={() => {
+              setAuthError('');
+              setShowEmailAuthModal(true);
+            }}
+            onLogout={handleLogout} 
+            theme={theme}
+            onToggleTheme={handleToggleTheme}
+          />
+        </div>
+      </div>
+
+      {/* Mobile Watchlist drawer */}
+      {activeTab !== 'settings' && activeTab !== 'notes' && activeTab !== 'ideas' && activeTab !== 'my_channel' && activeTab !== 'verdict' && activeTab !== 'coach' && (
+        <div className={`fixed inset-0 z-50 lg:hidden transition-opacity duration-300 ${mobileWatchlistOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-xs" onClick={() => setMobileWatchlistOpen(false)} />
+          <div className={`absolute top-0 bottom-0 right-0 w-[280px] bg-[#05070a] border-l border-[var(--line)] transition-transform duration-300 transform ${mobileWatchlistOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <Watchlist 
+              channels={channels} 
+              onAddChannel={handleAddChannel} 
+              onRefreshAll={handleRefreshAll} 
+            />
+          </div>
+        </div>
       )}
 
       {/* Email Auth Modal */}

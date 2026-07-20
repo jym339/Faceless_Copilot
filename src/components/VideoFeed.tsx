@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { formatDistanceToNow, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { X, ExternalLink, Play, Bell, BellRing } from 'lucide-react';
 import { Video, Alert } from '../types';
@@ -147,7 +147,7 @@ export default function VideoFeed({ videos, onIgnore }: VideoFeedProps) {
   };
 
   return (
-    <div className="video-feed flex-1 p-6 grid grid-cols-2 gap-6 overflow-y-auto">
+    <div className="video-feed flex-1 p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 overflow-y-auto">
       {videos.map(video => {
         const freshBadge = getFreshBadge(video.discovered_at);
         const trend = getTrendIndicator(video);
@@ -244,7 +244,7 @@ export default function VideoFeed({ videos, onIgnore }: VideoFeedProps) {
           onClick={() => setSelectedVideo(null)}
         >
           <div 
-            className="bg-[#0b0f17] border border-[var(--line)] rounded-2xl overflow-hidden max-w-3xl w-full shadow-2xl relative"
+            className="bg-[#0b0f17] border border-[var(--line)] rounded-2xl overflow-hidden max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl relative"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header / Title bar of modal */}

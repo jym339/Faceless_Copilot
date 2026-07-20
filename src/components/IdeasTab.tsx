@@ -590,7 +590,9 @@ Revise or expand the script outline accordingly. Keep it formatted in clear Mark
 
       {/* Right section: Claude AI Script Copilot Drawer */}
       {selectedAngle && (
-        <aside className="w-[380px] shrink-0 border-l border-[var(--line)] bg-[#070a10] flex flex-col h-full animate-slide-in relative z-50">
+        <>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 lg:hidden" onClick={() => { setSelectedAngle(null); setScriptOutline(null); }} />
+          <aside className="fixed inset-y-0 right-0 w-full max-w-[380px] border-l border-[var(--line)] bg-[#070a10] flex flex-col h-full animate-slide-in z-50 lg:relative lg:inset-auto lg:w-[380px]">
           {/* Drawer Header */}
           <div className="p-4 border-b border-[var(--line)] bg-[#0d131f]/60 flex justify-between items-center">
             <div className="flex items-center gap-2">
@@ -738,6 +740,7 @@ Revise or expand the script outline accordingly. Keep it formatted in clear Mark
             </div>
           )}
         </aside>
+        </>
       )}
     </div>
   );

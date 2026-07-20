@@ -75,21 +75,21 @@ export default function NewChannelsTab() {
             const ageString = ch.created_at ? formatDistanceToNow(new Date(ch.created_at), { addSuffix: true }) : 'unknown age';
             
             return (
-              <div key={ch.id} className="bg-[var(--card-bg)] border border-[var(--line)] rounded-xl p-5 flex gap-5 items-start">
+              <div key={ch.id} className="bg-[var(--card-bg)] border border-[var(--line)] rounded-xl p-4 md:p-5 flex flex-col sm:flex-row gap-4 sm:gap-5 items-start">
                 <img 
                   src={ch.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=60'} 
                   alt="" 
-                  className="w-12 h-12 rounded-full bg-slate-800 shrink-0 object-cover border border-[var(--line)]"
+                  className="w-12 h-12 rounded-full bg-slate-800 shrink-0 object-cover border border-[var(--line)] self-start"
                 />
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-start">
+                <div className="flex-1 min-w-0 w-full">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-3 w-full">
                     <div>
-                      <h3 className="font-bold text-base text-[var(--ink)] flex items-center gap-2">
+                      <h3 className="font-bold text-base text-[var(--ink)] flex items-center gap-2 flex-wrap">
                         {ch.title}
                         {ch.handle && <span className="text-xs text-[var(--muted)] font-normal">{ch.handle}</span>}
                       </h3>
-                      <div className="flex items-center gap-4 text-xs text-[var(--muted)] mt-1.5 font-mono">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[var(--muted)] mt-1.5 font-mono">
                         <span className="flex items-center gap-1">
                           <Calendar size={13} className="text-[var(--accent)]" /> 
                           Created: {ageString}
@@ -105,7 +105,7 @@ export default function NewChannelsTab() {
                       href={`https://youtube.com/channel/${ch.id}`} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-xs text-[var(--muted)] hover:text-[var(--accent)] flex items-center gap-1 border border-[var(--line)] px-2.5 py-1 rounded hover:bg-slate-800"
+                      className="text-xs text-[var(--muted)] hover:text-[var(--accent)] flex items-center gap-1 border border-[var(--line)] px-2.5 py-1 rounded hover:bg-slate-800 self-start shrink-0"
                     >
                       Channel <ExternalLink size={12} />
                     </a>

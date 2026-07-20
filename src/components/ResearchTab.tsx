@@ -414,7 +414,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
         ))}
       </div>
 
-      <form onSubmit={handleSearchSubmit} className="flex gap-2 max-w-2xl mb-8">
+      <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-2 max-w-2xl mb-8">
         <div className="relative flex-1">
           <Search size={18} className="absolute left-3 top-3 text-[var(--muted)]" />
           <input
@@ -428,7 +428,7 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
         <button
           type="submit"
           disabled={loading}
-          className="bg-[var(--accent)] hover:opacity-90 text-white font-semibold px-6 py-2.5 rounded-lg text-sm transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer whitespace-nowrap"
+          className="bg-[var(--accent)] hover:opacity-90 text-white font-semibold px-6 py-2.5 rounded-lg text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
         >
           {loading ? 'Sniping 100 Videos...' : 'Snipe Niches'}
         </button>

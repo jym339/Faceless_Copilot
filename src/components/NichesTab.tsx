@@ -88,9 +88,9 @@ export default function NichesTab() {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Creation Form */}
-        <div className="col-span-1 bg-[var(--card-bg)] border border-[var(--line)] rounded-xl p-5 h-fit">
+        <div className="lg:col-span-1 bg-[var(--card-bg)] border border-[var(--line)] rounded-xl p-5 h-fit">
           <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--muted)] mb-4 flex items-center gap-2">
             <Plus size={14} className="text-[var(--accent)]" /> Create Niche Topic
           </h2>
@@ -131,7 +131,7 @@ export default function NichesTab() {
         </div>
 
         {/* List of Niches */}
-        <div className="col-span-2 space-y-4">
+        <div className="lg:col-span-2 space-y-4">
           <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--muted)] flex items-center gap-2 mb-4">
             <BookOpen size={14} className="text-[var(--accent)]" /> Configured Niche Topics ({niches.length})
           </h2>
@@ -141,7 +141,7 @@ export default function NichesTab() {
               <div className="w-6 h-6 border-2 border-[var(--line)] border-t-[var(--accent)] rounded-full animate-spin"></div>
             </div>
           ) : niches.length > 0 ? (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {niches.map((n) => (
                 <div key={n.id} className="bg-[var(--card-bg)] border border-[var(--line)] rounded-xl p-4 flex flex-col justify-between">
                   <div>

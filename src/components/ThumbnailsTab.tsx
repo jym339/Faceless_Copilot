@@ -84,7 +84,7 @@ export default function ThumbnailsTab() {
       {activeSubTab === 'board' ? (
         <>
           {/* Filters Bar */}
-          <div className="mb-6 flex justify-between items-center bg-[#0b0f17] p-3 border border-[var(--line)] rounded-xl">
+          <div className="mb-6 flex flex-col sm:flex-row justify-between items-center bg-[#0b0f17] p-3 border border-[var(--line)] rounded-xl gap-3">
             <span className="text-[10px] font-bold font-mono text-[var(--muted)] uppercase tracking-wider">
               Niche Outlier High-CTR Assets ({videos.length} loaded)
             </span>
