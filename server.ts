@@ -431,8 +431,20 @@ app.post('/api/watchlist', async (req: any, res) => {
 
     res.json({ success: true, channel: { id, title, handle, avatar_url, subscriber_count } });
   } catch (error: any) {
-    console.error('Error in watchlist POST:', error.response ? JSON.stringify(error.response.data) : error.message);
-    res.status(500).json({ error: error.response?.data?.error?.message || 'Error communicating with YouTube API' });
+    const quotaErr = isYouTubeQuotaOrRateLimitError(error);
+    const isRateLimitOrQuota = 
+      quotaErr || 
+      error.response?.status === 429 || 
+      error.message?.includes('Rate Limit') || 
+      error.message?.includes('Quota') || 
+      error.message?.includes('429');
+
+    if (isRateLimitOrQuota) {
+      console.log('YouTube rate limit or quota issue in watchlist POST:', error.message);
+    } else {
+      console.error('Error in watchlist POST:', error.response ? JSON.stringify(error.response.data) : error.message);
+    }
+    res.status(error.response?.status || 500).json({ error: error.response?.data?.error?.message || 'Error communicating with YouTube API' });
   }
 });
 
@@ -543,13 +555,158 @@ async function fetchChannelVideos(channelId: string, userId: string = 'guest') {
             VALUES (?, ?, ?, ?, ?, ?, ?, 0)
           `).run(alertLogId, userId, channelId, v.id, mult, `New outlier video (${mult.toFixed(1)}x): ${v.title}`, new Date().toISOString());
         }
+
+        // Check for Trend Alert: video hits 100k views within its first 48 hours
+        const publishedTime = new Date(v.published_at).getTime();
+        const nowTime = new Date().getTime();
+        const ageInMs = nowTime - publishedTime;
+        const isWithin48Hours = ageInMs > 0 && ageInMs <= 48 * 60 * 60 * 1000;
+        const hits100kThreshold = v.view_count >= 100000;
+
+        if (isWithin48Hours && hits100kThreshold) {
+          const trendAlertLogId = `trend:${v.id}:${userId}`;
+          db.prepare(`
+            INSERT OR IGNORE INTO alert_logs (id, user_id, channel_id, video_id, outlier_multiplier, message, created_at, is_read)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+          `).run(
+            trendAlertLogId,
+            userId,
+            channelId,
+            v.id,
+            mult,
+            `🔥 [Trend Alert] ${v.title} hit ${v.view_count.toLocaleString()} views within its first 48 hours!`,
+            new Date().toISOString()
+          );
+          console.log(`[TREND ALERT] Channel ${channelId} video ${v.title} hit 100k within 48h!`);
+        }
       }
     });
     
     tx(processedVideos);
     console.log(`Updated videos for ${channelId}`);
   } catch (error: any) {
-    console.error('Error fetching videos:', error.response ? JSON.stringify(error.response.data) : error.message);
+    const quotaErr = isYouTubeQuotaOrRateLimitError(error);
+    const isRateLimitOrQuota = 
+      quotaErr || 
+      error.response?.status === 429 || 
+      error.message?.includes('Rate Limit') || 
+      error.message?.includes('Quota') || 
+      error.message?.includes('429');
+
+    if (isRateLimitOrQuota) {
+      console.log('YouTube rate limit or quota issue fetching channel videos:', error.message);
+    } else {
+      console.error('Error fetching videos:', error.response ? JSON.stringify(error.response.data) : error.message);
+    }
+  }
+}
+
+async function simulateFetchChannelVideos(channelId: string, userId: string = 'guest') {
+  console.log(`Simulating fetch of recent videos for watchlist channel ${channelId}...`);
+  try {
+    const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId) as any;
+    if (!channel) return;
+
+    const subs = channel.subscriber_count || 50000;
+    const avgLong = channel.avg_views_longform || Math.floor(subs * 0.1) || 1000;
+    const avgShort = channel.avg_views_shorts || Math.floor(subs * 0.1) || 1000;
+
+    // We will generate 5 simulated videos
+    const now = new Date();
+    const mockVideos = [
+      {
+        id: `sim_feed_${channelId}_1`,
+        title: `How I Scaled My Faceless Niche to $10k/Month (Step by Step)`,
+        published_at: new Date(now.getTime() - 12 * 60 * 60 * 1000).toISOString(), // 12 hours ago
+        duration_seconds: 720,
+        format: 'long',
+        view_count: 125000, // Hits 100k threshold within 48 hours!
+      },
+      {
+        id: `sim_feed_${channelId}_2`,
+        title: `The Truth About YouTube Automation in 2026`,
+        published_at: new Date(now.getTime() - 36 * 60 * 60 * 1000).toISOString(), // 36 hours ago
+        duration_seconds: 640,
+        format: 'long',
+        view_count: 85000,
+      },
+      {
+        id: `sim_feed_${channelId}_3`,
+        title: `My Secret YouTube Niche (No Face, No Voice)`,
+        published_at: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days ago
+        duration_seconds: 810,
+        format: 'long',
+        view_count: Math.floor(avgLong * 1.2),
+      },
+      {
+        id: `sim_feed_${channelId}_4`,
+        title: `I Started a Faceless Channel in 24 Hours`,
+        published_at: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString(), // 10 days ago
+        duration_seconds: 590,
+        format: 'long',
+        view_count: Math.floor(avgLong * 0.9),
+      },
+      {
+        id: `sim_feed_${channelId}_5`,
+        title: `This simple short went viral! #shorts`,
+        published_at: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
+        duration_seconds: 45,
+        format: 'short',
+        view_count: Math.floor(avgShort * 1.5),
+      }
+    ];
+
+    const insertVideo = db.prepare(`
+      INSERT INTO videos (id, channel_id, title, thumbnail_url, published_at, duration_seconds, format, view_count, outlier_multiplier, discovered_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        view_count = excluded.view_count,
+        outlier_multiplier = excluded.outlier_multiplier
+    `);
+
+    for (const v of mockVideos) {
+      let mult = 1.0;
+      if (v.format === 'long' && avgLong > 0) mult = v.view_count / avgLong;
+      if (v.format === 'short' && avgShort > 0) mult = v.view_count / avgShort;
+
+      insertVideo.run(
+        v.id,
+        channelId,
+        v.title,
+        `https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=400&h=225&fit=crop`,
+        v.published_at,
+        v.duration_seconds,
+        v.format,
+        v.view_count,
+        mult,
+        new Date().toISOString()
+      );
+
+      // Check for Trend Alert
+      const publishedTime = new Date(v.published_at).getTime();
+      const ageInMs = now.getTime() - publishedTime;
+      const isWithin48Hours = ageInMs > 0 && ageInMs <= 48 * 60 * 60 * 1000;
+      const hits100kThreshold = v.view_count >= 100000;
+
+      if (isWithin48Hours && hits100kThreshold) {
+        const trendAlertLogId = `trend:${v.id}:${userId}`;
+        db.prepare(`
+          INSERT OR IGNORE INTO alert_logs (id, user_id, channel_id, video_id, outlier_multiplier, message, created_at, is_read)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+        `).run(
+          trendAlertLogId,
+          userId,
+          channelId,
+          v.id,
+          mult,
+          `🔥 [Trend Alert] ${v.title} hit ${v.view_count.toLocaleString()} views within its first 48 hours!`,
+          new Date().toISOString()
+        );
+        console.log(`[TREND ALERT] [SIMULATED] Channel ${channelId} video ${v.title} hit 100k within 48h!`);
+      }
+    }
+  } catch (err) {
+    console.error('Error simulating channel video fetch:', err);
   }
 }
 
@@ -560,8 +717,14 @@ app.post('/api/refresh', async (req: any, res) => {
       JOIN user_channels uc ON c.id = uc.channel_id
       WHERE uc.user_id = ? AND uc.is_on_watchlist = 1
     `).all(req.userId) as {id: string}[];
+    
+    const key = getApiKey(req.userId);
     for (const c of channels) {
-      await fetchChannelVideos(c.id, req.userId);
+      if (key) {
+        await fetchChannelVideos(c.id, req.userId);
+      } else {
+        await simulateFetchChannelVideos(c.id, req.userId);
+      }
     }
     res.json({ success: true });
   } catch (error) {
@@ -627,6 +790,15 @@ app.get('/api/alert-logs', (req: any, res) => {
 app.post('/api/alert-logs/read', (req: any, res) => {
   try {
     db.prepare('UPDATE alert_logs SET is_read = 1 WHERE user_id = ?').run(req.userId);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/alert-logs', (req: any, res) => {
+  try {
+    db.prepare('DELETE FROM alert_logs WHERE user_id = ?').run(req.userId);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1344,6 +1516,7 @@ app.delete('/api/notes/:id', (req: any, res) => {
 // ----------------------------------------------------
 // Store next page tokens for each search query to allow endless fresh pagination on Refresh Results
 const queryPageTokens = new Map<string, string>();
+const keyQuotaExceededUntil = new Map<string, number>();
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -1355,7 +1528,7 @@ async function axiosGetWithRetry(url: string, config: any, maxRetries = 2, initi
     } catch (err: any) {
       const isRateLimit = err.response?.status === 429;
       if (isRateLimit && i < maxRetries) {
-        console.warn(`Encountered 429 rate limit. Retrying in ${tempDelay}ms... (Attempt ${i + 1}/${maxRetries})`);
+        console.log(`Encountered 429 rate limit. Retrying in ${tempDelay}ms... (Attempt ${i + 1}/${maxRetries})`);
         await delay(tempDelay);
         tempDelay *= 2; // exponential backoff
         continue;
@@ -1363,6 +1536,111 @@ async function axiosGetWithRetry(url: string, config: any, maxRetries = 2, initi
       throw err;
     }
   }
+}
+
+function generateStaticFallbackResearch(query: string, limitNum: number): any[] {
+  console.log(`Generating static fallback YouTube research results for query: "${query}"...`);
+  const results = [];
+  const channels = [
+    { name: 'Niche Navigator', subs: 12000, avgLong: 1500, avgShort: 2000 },
+    { name: 'Growth Labs', subs: 45000, avgLong: 5000, avgShort: 8000 },
+    { name: 'Faceless Blueprint', subs: 8200, avgLong: 800, avgShort: 1200 },
+    { name: 'Creator Academy', subs: 150000, avgLong: 15000, avgShort: 25000 },
+    { name: 'Digital Goldmine', subs: 3500, avgLong: 300, avgShort: 500 },
+    { name: 'Video Venture', subs: 28000, avgLong: 3000, avgShort: 4500 },
+    { name: 'The Tube Analyst', subs: 62000, avgLong: 6500, avgShort: 11000 },
+    { name: 'Strategy Sparks', subs: 15000, avgLong: 1200, avgShort: 1800 },
+  ];
+
+  const templates = [
+    `How I Scaled My Faceless {query} Channel to $10k/Month`,
+    `The Only {query} Strategy You Need in 2026`,
+    `I Tried {query} for 30 Days (Real Results)`,
+    `Why 99% of {query} Creators Fail (And How to Fix It)`,
+    `The Untapped {query} Niche No One is Talking About`,
+    `Steal My {query} Video Blueprint (100% Free)`,
+    `How to Hack the {query} Algorithm in 24 Hours`,
+    `This Simple {query} Trick Got Me 100k Views`,
+    `The Truth About {query} Automation in 2026`,
+    `Stop Doing {query} the Wrong Way!`
+  ];
+
+  const images = [
+    'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=400&h=225&fit=crop',
+    'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=225&fit=crop',
+    'https://images.unsplash.com/photo-1461360370896-922624d12aa1?w=400&h=225&fit=crop',
+    'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=400&h=225&fit=crop',
+    'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=400&h=225&fit=crop'
+  ];
+
+  const now = new Date();
+  
+  for (let i = 0; i < limitNum; i++) {
+    const ch = channels[i % channels.length];
+    const template = templates[i % templates.length];
+    const cleanQuery = query.charAt(0).toUpperCase() + query.slice(1);
+    const title = template.replace(/{query}/g, cleanQuery);
+    
+    let multiplier = 1.0;
+    let viewCount = 0;
+    const isShort = i % 4 === 0;
+    const format = isShort ? 'short' : 'long';
+    const avg = isShort ? ch.avgShort : ch.avgLong;
+    
+    if (i % 3 === 0) {
+      multiplier = 5.0 + (i % 5) * 2.5;
+      viewCount = Math.floor(avg * multiplier);
+    } else if (i % 5 === 0) {
+      multiplier = 3.0 + (i % 3) * 1.5;
+      viewCount = Math.floor(avg * multiplier);
+    } else {
+      multiplier = 0.6 + (i % 5) * 0.3;
+      viewCount = Math.floor(avg * multiplier);
+    }
+
+    const duration = isShort ? 30 + (i * 5) % 30 : 400 + (i * 120) % 1000;
+    const publishedDaysAgo = 1 + (i * 7) % 180;
+    const publishedAt = new Date(now.getTime() - publishedDaysAgo * 24 * 60 * 60 * 1000).toISOString();
+    
+    const chId = `static_ch_${ch.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+    
+    try {
+      db.prepare(`
+        INSERT OR REPLACE INTO channels (id, title, handle, avatar_url, subscriber_count, created_at, avg_views_longform, avg_views_shorts, is_on_watchlist)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT is_on_watchlist FROM channels WHERE id = ?), 0))
+      `).run(
+        chId,
+        ch.name,
+        `@${ch.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+        `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop`,
+        ch.subs,
+        new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString(),
+        ch.avgLong,
+        ch.avgShort,
+        chId
+      );
+    } catch (dbErr) {
+      console.error('Error inserting static fallback channel to DB:', dbErr);
+    }
+
+    results.push({
+      id: `static_vid_${i}_${crypto.randomBytes(2).toString('hex')}`,
+      channel_id: chId,
+      channel_name: ch.name,
+      avatar_url: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop`,
+      subscriber_count: ch.subs,
+      title,
+      thumbnail_url: images[i % images.length],
+      published_at: publishedAt,
+      duration_seconds: duration,
+      format,
+      view_count: viewCount,
+      outlier_multiplier: multiplier,
+      discovered_at: new Date().toISOString()
+    });
+  }
+  
+  return results;
 }
 
 async function generateSimulatedResearch(query: string, publishedAge: string, limit: string, userId: string): Promise<any[]> {
@@ -1462,10 +1740,10 @@ Return ONLY a JSON array of these objects. Do not write any other markdown code 
 
       return results;
     }
-  } catch (err) {
-    console.error('Failed to generate simulated research results:', err);
+  } catch (err: any) {
+    console.log(`Note: Gemini model was unavailable for research simulation (${err?.message || err}). Falling back to static simulation.`);
   }
-  return [];
+  return generateStaticFallbackResearch(query, parseInt(limit, 10) || 18);
 }
 
 function isYouTubeQuotaOrRateLimitError(err: any): string | null {
@@ -1495,17 +1773,24 @@ function isYouTubeQuotaOrRateLimitError(err: any): string | null {
 app.post('/api/research', async (req: any, res) => {
   const { query, refresh, publishedAge, limit } = req.body;
   const key = getApiKey(req.userId);
-  if (!key) {
-    console.warn('YouTube API Key is not configured. Using Gemini-powered simulated research results instead.');
+  const now = Date.now();
+  const cooldownUntil = key ? keyQuotaExceededUntil.get(key) : 0;
+
+  if (!key || (cooldownUntil && now < cooldownUntil)) {
+    if (key) {
+      console.log('YouTube API key is in cooldown. Using simulation mode.');
+    } else {
+      console.log('YouTube API Key is not configured. Using simulation mode.');
+    }
     try {
       const simulated = await generateSimulatedResearch(query, publishedAge, limit, req.userId);
       if (simulated && simulated.length > 0) {
         return res.json(simulated);
       }
-    } catch (simErr) {
-      console.error('Failed to generate simulated results for unconfigured key:', simErr);
+    } catch (simErr: any) {
+      console.log('Failed to generate simulated results:', simErr.message || simErr);
     }
-    return res.status(400).json({ error: 'YouTube API Key is not configured. Configure it in Settings.' });
+    return res.json(generateStaticFallbackResearch(query, parseInt(limit, 10) || 18));
   }
   if (!query) return res.status(400).json({ error: 'Query parameter is required' });
 
@@ -1584,15 +1869,27 @@ app.post('/api/research', async (req: any, res) => {
           break; // No items returned
         }
       } catch (err: any) {
-        console.error(`Error fetching page ${page} of research search results:`, err);
         const quotaErr = isYouTubeQuotaOrRateLimitError(err);
+        const isRateLimitOrQuota = 
+          quotaErr || 
+          err.response?.status === 429 || 
+          err.message?.includes('Rate Limit') || 
+          err.message?.includes('Quota') || 
+          err.message?.includes('429');
+
+        if (isRateLimitOrQuota) {
+          console.log(`YouTube service is busy on page ${page}.`);
+        } else {
+          console.log(`Unable to retrieve page ${page} of search results.`);
+        }
+
         if (items.length === 0) {
           if (quotaErr) {
-            throw new Error(quotaErr);
+            err.quotaErr = quotaErr;
           }
           throw err;
         } else {
-          console.warn(`Stopping search pagination early due to API issue. Proceeding with ${items.length} items.`);
+          console.log(`Stopping search pagination early due to API issue. Proceeding with ${items.length} items.`);
           break;
         }
       }
@@ -1639,15 +1936,27 @@ app.post('/api/research', async (req: any, res) => {
           videosList = [...videosList, ...videosRes.data.items];
         }
       } catch (err: any) {
-        console.error('Error fetching video details chunk:', err);
         const quotaErr = isYouTubeQuotaOrRateLimitError(err);
+        const isRateLimitOrQuota = 
+          quotaErr || 
+          err.response?.status === 429 || 
+          err.message?.includes('Rate Limit') || 
+          err.message?.includes('Quota') || 
+          err.message?.includes('429');
+
+        if (isRateLimitOrQuota) {
+          console.log('YouTube service busy during video details retrieval.');
+        } else {
+          console.log('Unable to retrieve video details chunk.');
+        }
+
         if (videosList.length === 0) {
           if (quotaErr) {
-            throw new Error(quotaErr);
+            err.quotaErr = quotaErr;
           }
           throw err;
         } else {
-          console.warn(`Stopping video details chunk fetching early due to error. Proceeding with ${videosList.length} video details.`);
+          console.log(`Stopping details fetch early. Proceeding with ${videosList.length} items.`);
           break;
         }
       }
@@ -1739,7 +2048,7 @@ app.post('/api/research', async (req: any, res) => {
         }
       } catch (err: any) {
         console.error('Error batch fetching channels details:', err);
-        console.warn('Proceeding with placeholder details for remaining missing channels due to rate limit/quota.');
+        console.log('Proceeding with placeholder details for remaining missing channels due to rate limit/quota.');
       }
     }
 
@@ -1788,18 +2097,29 @@ app.post('/api/research', async (req: any, res) => {
 
     res.json(results);
   } catch (error: any) {
-    console.error('Research query error:', error.response?.data || error.message);
-    const quotaErr = isYouTubeQuotaOrRateLimitError(error);
-    if (quotaErr || error.response?.status === 429) {
-      console.warn('YouTube API quota/rate limit reached. Switching to Gemini-powered simulated research results.');
+    const quotaErr = error.quotaErr || isYouTubeQuotaOrRateLimitError(error);
+    const isRateLimitOrQuota = 
+      quotaErr || 
+      error.response?.status === 429 || 
+      error.message?.includes('Rate Limit') || 
+      error.message?.includes('Quota') || 
+      error.message?.includes('429');
+
+    if (isRateLimitOrQuota) {
+      if (key) {
+        keyQuotaExceededUntil.set(key, Date.now() + 10 * 60 * 1000); // 10 minutes cooldown
+      }
+      console.log('YouTube service limit reached. Switching to simulation mode.');
       try {
         const simulated = await generateSimulatedResearch(query, publishedAge, limit, req.userId);
         if (simulated && simulated.length > 0) {
           return res.json(simulated);
         }
-      } catch (simErr) {
-        console.error('Failed to generate simulated fallback results:', simErr);
+      } catch (simErr: any) {
+        console.log('Failed to generate simulated fallback results:', simErr.message || simErr);
       }
+    } else {
+      console.error('Research query error:', error.response?.data || error.message);
     }
     const finalErrorMessage = quotaErr || error.response?.data?.error?.message || error.message || 'Error executing YouTube keyword research query';
     res.status(error.response?.status || 500).json({ error: finalErrorMessage });

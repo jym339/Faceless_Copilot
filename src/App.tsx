@@ -12,7 +12,7 @@ import IdeasTab from './components/IdeasTab';
 import MyChannelTab from './components/MyChannelTab';
 import VerdictTab from './components/VerdictTab';
 import NicheCoachTab from './components/NicheCoachTab';
-import { Menu, Users, Sparkles } from 'lucide-react';
+import { Menu, Users, Sparkles, Bell, BellOff, Flame, Trash2 } from 'lucide-react';
 import { Channel, Video } from './types';
 
 export default function App() {
@@ -62,6 +62,34 @@ export default function App() {
   const [sortOption, setSortOption] = useState<'outlier' | 'date' | 'views' | 'subs'>('outlier');
   const [searchQuery, setSearchQuery] = useState('');
   const [quotaUsed, setQuotaUsed] = useState(0);
+
+  const [alertLogs, setAlertLogs] = useState<any[]>([]);
+  const [showNotificationCenter, setShowNotificationCenter] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<string>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'default';
+  });
+
+  const requestNotificationPermission = () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      Notification.requestPermission().then(permission => {
+        setNotificationPermission(permission);
+      });
+    }
+  };
+
+  const clearNotifications = async () => {
+    try {
+      const res = await authFetch('/api/alert-logs', { method: 'DELETE' });
+      if (res.ok) {
+        setAlertLogs([]);
+      }
+    } catch (err) {
+      console.error('Failed to clear notifications', err);
+    }
+  };
 
   const [showEmailAuthModal, setShowEmailAuthModal] = useState(false);
   const [emailAuthMode, setEmailAuthMode] = useState<'signin' | 'signup'>('signin');
@@ -193,11 +221,14 @@ export default function App() {
       const res = await authFetch('/api/alert-logs');
       if (res.ok) {
         const logs = await res.json();
+        setAlertLogs(logs);
         const unreadLogs = logs.filter((l: any) => l.is_read === 0);
         if (unreadLogs.length > 0) {
           if (Notification.permission === 'granted') {
             unreadLogs.forEach((log: any) => {
-              new Notification(`Outlier Alert: ${log.channel_name}`, {
+              const isTrendAlert = log.message.includes('[Trend Alert]');
+              const title = isTrendAlert ? `🔥 Trend Alert: ${log.channel_name}` : `Outlier Alert: ${log.channel_name}`;
+              new Notification(title, {
                 body: log.message,
                 icon: log.thumbnail_url || log.avatar_url
               });
@@ -206,7 +237,9 @@ export default function App() {
             Notification.requestPermission().then(permission => {
               if (permission === 'granted') {
                 unreadLogs.forEach((log: any) => {
-                  new Notification(`Outlier Alert: ${log.channel_name}`, {
+                  const isTrendAlert = log.message.includes('[Trend Alert]');
+                  const title = isTrendAlert ? `🔥 Trend Alert: ${log.channel_name}` : `Outlier Alert: ${log.channel_name}`;
+                  new Notification(title, {
                     body: log.message,
                     icon: log.thumbnail_url || log.avatar_url
                   });
@@ -215,6 +248,11 @@ export default function App() {
             });
           }
           await authFetch('/api/alert-logs/read', { method: 'POST' });
+          // Fetch again to keep in-app read state in sync
+          const resSync = await authFetch('/api/alert-logs');
+          if (resSync.ok) {
+            setAlertLogs(await resSync.json());
+          }
         }
       }
     } catch (err) {
@@ -446,6 +484,111 @@ export default function App() {
                     <option value="views">Raw Views</option>
                     <option value="subs">Channel Size</option>
                   </select>
+                </div>
+
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setShowNotificationCenter(!showNotificationCenter);
+                      // Mark read when opening
+                      if (alertLogs.some(l => l.is_read === 0)) {
+                        authFetch('/api/alert-logs/read', { method: 'POST' }).then(() => {
+                          setAlertLogs(prev => prev.map(l => ({ ...l, is_read: 1 })));
+                        });
+                      }
+                    }}
+                    className="p-2 bg-[var(--card-bg)] border border-[var(--line)] rounded-lg text-[var(--muted)] hover:text-white transition-all cursor-pointer flex items-center justify-center relative"
+                    title="Trend Alerts & Outliers"
+                  >
+                    <Bell size={14} className={alertLogs.some(l => l.is_read === 0) ? "text-amber-500 animate-bounce" : ""} />
+                    {alertLogs.some(l => l.is_read === 0) && (
+                      <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                    )}
+                  </button>
+
+                  {showNotificationCenter && (
+                    <div className="absolute right-0 mt-2 w-80 bg-[#0b0f17] border border-[var(--line)] rounded-xl shadow-2xl p-4 z-50 flex flex-col max-h-[400px]">
+                      <div className="flex items-center justify-between border-b border-[var(--line)] pb-2 mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <Bell size={14} className="text-amber-500" />
+                          <span className="text-xs font-bold text-white uppercase tracking-wider">Trend & Outlier Alerts</span>
+                        </div>
+                        {alertLogs.length > 0 && (
+                          <button
+                            onClick={clearNotifications}
+                            className="text-[10px] text-red-400 hover:text-red-300 font-semibold flex items-center gap-1 cursor-pointer"
+                            title="Clear History"
+                          >
+                            <Trash2 size={10} /> Clear
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Permission Banner */}
+                      {notificationPermission !== 'granted' && (
+                        <div className="mb-3 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 flex flex-col gap-1.5">
+                          <div className="text-[10px] text-amber-300 font-semibold leading-tight">
+                            Enable real-time Desktop Notifications for instant Trend Alerts!
+                          </div>
+                          <button
+                            onClick={requestNotificationPermission}
+                            className="bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-[9px] py-1 rounded transition-colors cursor-pointer text-center uppercase"
+                          >
+                            Enable Desktop Alerts
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex-1 overflow-y-auto space-y-2 min-h-[100px]">
+                        {alertLogs.length === 0 ? (
+                          <div className="h-24 flex flex-col items-center justify-center text-[var(--muted)] gap-1">
+                            <BellOff size={16} className="opacity-50" />
+                            <span className="text-[10px] font-mono">No recent alerts triggered.</span>
+                          </div>
+                        ) : (
+                          alertLogs.map((log) => {
+                            const isTrend = log.message.includes('[Trend Alert]');
+                            return (
+                              <div 
+                                key={log.id} 
+                                className={`p-2 rounded-lg border text-left transition-colors flex gap-2.5 items-start ${
+                                  isTrend 
+                                    ? 'bg-amber-500/5 border-amber-500/10 hover:bg-amber-500/10' 
+                                    : 'bg-[#121824]/40 border-[var(--line)] hover:bg-[#121824]/60'
+                                }`}
+                              >
+                                {log.thumbnail_url || log.avatar_url ? (
+                                  <img 
+                                    src={log.thumbnail_url || log.avatar_url} 
+                                    alt="preview" 
+                                    className="w-10 h-7 rounded bg-[#1e293b] object-cover shrink-0 mt-0.5 border border-[var(--line)]" 
+                                  />
+                                ) : (
+                                  <div className="w-10 h-7 rounded bg-[#1e293b] flex items-center justify-center shrink-0 mt-0.5 border border-[var(--line)]">
+                                    {isTrend ? <Flame size={12} className="text-amber-500" /> : <Bell size={12} className="text-amber-400" />}
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                                    <span className="text-[9px] font-bold text-white truncate max-w-[120px]">{log.channel_name}</span>
+                                    <span className="text-[8px] text-[var(--muted)] font-mono shrink-0">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                  </div>
+                                  <p className="text-[10px] text-[var(--muted)] leading-tight font-sans line-clamp-2">
+                                    {log.message}
+                                  </p>
+                                  {isTrend && (
+                                    <span className="inline-flex items-center gap-0.5 mt-1 px-1 py-0.5 bg-amber-500/10 text-amber-500 text-[8px] font-extrabold rounded uppercase tracking-wider font-mono">
+                                      <Flame size={8} className="fill-amber-500" /> Viral Spike
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <input 

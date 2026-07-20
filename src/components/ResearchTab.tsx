@@ -71,7 +71,23 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
 
   // Run initial loading on mount
   useEffect(() => {
-    fetchResearch(query);
+    const cachedResults = localStorage.getItem('research_results');
+    const cachedQuery = localStorage.getItem('research_query');
+    if (cachedQuery) {
+      setQuery(cachedQuery);
+    }
+    if (cachedResults) {
+      try {
+        const parsed = JSON.parse(cachedResults);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setResults(parsed);
+          return;
+        }
+      } catch (e) {
+        console.error('Error parsing cached research results', e);
+      }
+    }
+    fetchResearch(cachedQuery || query);
   }, []);
 
   const fetchResearch = async (searchQuery: string, isRefresh = false, activeAge = publishedAge) => {
@@ -150,6 +166,8 @@ export default function ResearchTab({ onAddChannel, watchlistChannelIds }: Resea
           }
         }
         setResults(uniqueVideos);
+        localStorage.setItem('research_results', JSON.stringify(uniqueVideos));
+        localStorage.setItem('research_query', searchQuery);
         setProgressPercent(100);
         setProgressStep(`Analysis complete! ${uniqueVideos.length} items populated.`);
         
